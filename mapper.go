@@ -7,18 +7,33 @@ import (
     "regexp"
     "strconv"
     "os"
+    "sort"
     "jfb/svgxml"
 )
 
 type Config struct {
-    // member  type        json element
     Colours map[string]string `json:"colours"`
+}
+
+// set up integer array sorting
+
+type IntArray []int
+
+func (list IntArray) Len() int {
+    return len(list)
+}
+
+func (list IntArray) Swap(a, b int) {
+    list[a], list[b] = list[b], list[a]
+}
+
+func (list IntArray) Less(a, b int) bool {
+    return list[a] < list[b]
 }
 
 func main() {
 
     var config Config
-    var colors map[int]string
 
     if len(os.Args) < 2 {
         fmt.Fprintf(os.Stderr, "Please specify at least one filename on the command line.\n")
@@ -41,12 +56,18 @@ func main() {
         panic(err)
     }
 
-    // convert string-based JSON to all-integer map
-    colors = make(map[int]string)
-    for k, v := range config.Colours {
+    // make sorted list of keys (minimum counts) for later comparisons
+    mincount := make([]int, len(config.Colours))
+    i := 0
+    for k, _ := range config.Colours {
         k_i, _ := strconv.ParseInt(k, 0, 64)
-        colors[int(k_i)] = v
+        mincount[i] = int(k_i)
+	i++
     }
+
+    sort.Sort(IntArray(mincount))
+
+    data_in := map[string]int{ "HI": 1, "MN": 19, "MI": 20 }
 
     mapsvg_obj := svgxml.XML2SVG(mapsvg)
     if mapsvg_obj == nil {
@@ -58,15 +79,22 @@ func main() {
         panic(err)
     }
 
-    element := svgxml.FindPathById(mapsvg_obj, "HI")
+    for state, state_count := range data_in {
+	for _, mc := range mincount {
+	    if state_count >= mc {
+		element := svgxml.FindPathById(mapsvg_obj, state)
+		if element != nil {
+		    element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}" + config.Colours[strconv.Itoa(mc)])))
+		} else {
+		    fmt.Fprintf(os.Stderr, "'%s' not found\n", state)
+		}
 
-    if element != nil {
-        element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}ffaaaa")))
-    } else {
-        fmt.Println("'HI' not found")
+	    }
+	}
     }
 
-    // fmt.Println(string(svgxml.SVG2XML(mapsvg_obj, true)))
+
+    fmt.Println(string(svgxml.SVG2XML(mapsvg_obj, true)))
 
 }
 
