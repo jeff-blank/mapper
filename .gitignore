@@ -16,4 +16,4 @@
 # vim
 *.swp
 
-.dbconfig.json
+dbconfig.json
