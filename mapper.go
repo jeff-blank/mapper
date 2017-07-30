@@ -1,34 +1,83 @@
 package main
 
 import (
+    "database/sql"
     "encoding/json"
     "fmt"
+    "log"
     "io/ioutil"
     "regexp"
     "strconv"
     "os"
     "sort"
+    s "strings"
     "jfb/svgxml"
+    _ "github.com/lib/pq"
 )
 
 type Config struct {
     Colours map[string]string `json:"colours"`
 }
 
+type DbConfig struct {
+    Server      map[string]string       `json:"db_server"`
+    Creds       map[string]string       `json:"db_creds"`
+}
+
 // set up integer array sorting
-
 type IntArray []int
+func (list IntArray) Len() int          { return len(list) }
+func (list IntArray) Swap(a, b int)     { list[a], list[b] = list[b], list[a] }
+func (list IntArray) Less(a, b int) bool { return list[a] < list[b] }
 
-func (list IntArray) Len() int {
-    return len(list)
-}
+// suck in count data
+func db_data() (map[string]int, map[string]int) {
+    var dbconfig        DbConfig
 
-func (list IntArray) Swap(a, b int) {
-    list[a], list[b] = list[b], list[a]
-}
+    jsoncfg, err := ioutil.ReadFile(".dbconfig.json")
+    if err != nil {
+        panic(err)
+    }
 
-func (list IntArray) Less(a, b int) bool {
-    return list[a] < list[b]
+    err = json.Unmarshal(jsoncfg, &dbconfig)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "DB config unmarshal: ")
+        panic(err)
+    }
+
+    state_counts :=     make(map[string]int)
+    county_counts :=    make(map[string]int)
+
+    dbh, err := sql.Open("postgres",
+        "postgres://" + dbconfig.Creds["username"] + ":" + dbconfig.Creds["password"] + "@" +
+        dbconfig.Server["dbhost"] + "/" + dbconfig.Server["dbname"] + "?sslmode=require")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    rows, err := dbh.Query(`SELECT state, county, count(county) from hits where ` +
+        `country = 'US' group by state, county`)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    defer rows.Close()
+    for rows.Next() {
+        var state, county string
+        var count int
+        if err := rows.Scan(&state, &county, &count); err != nil {
+            log.Fatal(err)
+        }
+        state_counts[state] += count
+        state_county_key := s.Replace(state + " " + county, " ", "_", -1)
+        county_counts[state_county_key] = count
+    }
+    if err := rows.Err(); err != nil {
+        log.Fatal(err)
+    }
+
+    return state_counts, county_counts
+
 }
 
 func main() {
@@ -52,7 +101,7 @@ func main() {
 
     err = json.Unmarshal(jsoncfg, &config)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Unmarshal: ")
+        fmt.Fprintf(os.Stderr, "Config unmarshal: ")
         panic(err)
     }
 
@@ -67,8 +116,6 @@ func main() {
 
     sort.Sort(IntArray(mincount))
 
-    data_in := map[string]int{ "HI": 1, "MN": 19, "MI": 20 }
-
     mapsvg_obj := svgxml.XML2SVG(mapsvg)
     if mapsvg_obj == nil {
         os.Exit(1)
@@ -79,7 +126,9 @@ func main() {
         panic(err)
     }
 
-    for state, state_count := range data_in {
+    state, _ := db_data()
+
+    for state, state_count := range state {
 	for _, mc := range mincount {
 	    if state_count >= mc {
 		element := svgxml.FindPathById(mapsvg_obj, state)
