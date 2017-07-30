@@ -147,4 +147,4 @@ func main() {
 
 }
 
-// vim:ai:sw=4:ts=8:
+// ex:ai:sw=4:ts=8:
