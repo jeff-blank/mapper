@@ -34,7 +34,7 @@ func (list IntArray) Less(a, b int) bool { return list[a] < list[b] }
 func db_data() (map[string]int, map[string]int) {
     var dbconfig        DbConfig
 
-    jsoncfg, err := ioutil.ReadFile(".dbconfig.json")
+    jsoncfg, err := ioutil.ReadFile("dbconfig.json")
     if err != nil {
         panic(err)
     }
