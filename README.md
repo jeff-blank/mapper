@@ -1,6 +1,44 @@
 # mapper
 
-Format of `dbconfig.json`:
+## Format of input SVG files
+
+An SVG file of states without counties should contain colourable paths named
+for the states. Any naming/abbreviating convention can be used as long as it
+matches what is produced by the database query (see next section). The paths
+are expected to be found in the following SVG structure:
+
+`<svg ...>
+  <g ...>
+    <path id="state" />
+  </g>
+</svg>`
+
+An SVG file of counties should be structured the same way, except that the
+path ids should be `"state_county_name"`; in other words, the state (as
+found in the database), an underscore, and the county name as found in
+the database. Due to the SVG files I use, there is code in `mapper` to
+transform all spaces to underscores before searching the SVG file for
+each element. Examples (as found in the file):
+
+* Hennepin County, MN:
+  * `MN_Hennepin`
+  * `Minnesota_Hennepin`
+* Saint Louis, MO (independent city, not county)
+  * `MO_Saint_Louis_City`
+  * `Missouri_St_Louis`
+  * etc
+* Cass County, ND:
+  * `ND_Cass`
+  * `North_Dakota_Cass`
+
+As you might guess by this point, the SVG files don't actually need to be
+maps. But the path names in the "county" map(s) need(s) to be prefixed with
+the path names in the "state" map(s) for the code to work as written.
+
+## Database configuration
+
+The database configuration should be in `dbconfig.json`, which is not
+provided in the repository. Use the following format:
 
 ```
 {
