@@ -3,14 +3,18 @@ package main
 import (
     "database/sql"
     "encoding/json"
+    "flag"
     "fmt"
     "log"
+    "io"
     "io/ioutil"
-    "regexp"
+    re "regexp"
     "strconv"
     "os"
+    "os/exec"
     "sort"
     s "strings"
+    "sync"
     "jfb/svgxml"
     _ "github.com/lib/pq"
 )
@@ -22,6 +26,7 @@ type Config struct {
 type DbConfig struct {
     Server      map[string]string       `json:"db_server"`
     Creds       map[string]string       `json:"db_creds"`
+    Schema      map[string]string       `json:"db_schema"`
 }
 
 // set up integer array sorting
@@ -48,15 +53,25 @@ func db_data() (map[string]int, map[string]int) {
     state_counts :=     make(map[string]int)
     county_counts :=    make(map[string]int)
 
-    dbh, err := sql.Open("postgres",
-        "postgres://" + dbconfig.Creds["username"] + ":" + dbconfig.Creds["password"] + "@" +
-        dbconfig.Server["dbhost"] + "/" + dbconfig.Server["dbname"] + "?sslmode=require")
+    dbh, err := sql.Open(dbconfig.Server["dbtype"],
+        dbconfig.Server["dbtype"] + "://" + dbconfig.Creds["username"] + ":" +
+        dbconfig.Creds["password"] + "@" + dbconfig.Server["dbhost"] + "/" +
+        dbconfig.Server["dbname"] + dbconfig.Server["dbopts"])
     if err != nil {
         log.Fatal(err)
     }
 
-    rows, err := dbh.Query(`SELECT state, county, count(county) from hits where ` +
-        `country = 'US' group by state, county`)
+    query :=
+            "select " +
+                dbconfig.Schema["state_column"] + ", " +
+                dbconfig.Schema["county_column"] + ", " +
+                dbconfig.Schema["tally_column"] +
+            "from " +
+                dbconfig.Schema["tables"] + " " +
+            dbconfig.Schema["where"] + " " +
+            dbconfig.Schema["group_by"]
+    rows, err := dbh.Query(query)
+    // fmt.Println(query)
     if err != nil {
         log.Fatal(err)
     }
@@ -80,21 +95,70 @@ func db_data() (map[string]int, map[string]int) {
 
 }
 
+func usage(exit_status int) {
+    flag.PrintDefaults()
+    fmt.Fprintf(os.Stderr, "\n  -state and -county may be specified multiple times\n\nAdditional parameters: none\n")
+    os.Exit(exit_status)
+}
+
+func colour_svgdata(mapsvg []byte, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) (string) {
+    mapsvg_obj := svgxml.XML2SVG(mapsvg)
+    if mapsvg_obj == nil {
+        return ":SVGERR"
+    }
+
+    for id, count := range data {
+        for _, mc := range mincount {
+            if count >= mc {
+                element := svgxml.FindPathById(mapsvg_obj, id)
+                if element != nil {
+                    element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}" + colours[strconv.Itoa(mc)])))
+                } else {
+                    fmt.Fprintf(os.Stderr, "'%s' not found\n", id)
+                }
+            }
+        }
+    }
+    return string(svgxml.SVG2XML(mapsvg_obj, true))
+}
+
 func main() {
 
-    var config Config
+    var config  Config
+    var wg      sync.WaitGroup
 
-    if len(os.Args) < 2 {
-        fmt.Fprintf(os.Stderr, "Please specify at least one filename on the command line.\n")
-        os.Exit(1)
+    h := flag.Bool("h", false, "usage information")
+    help := flag.Bool("help", false, "usage information")
+    state_flag := flag.String("state", "", "state map(s), format input_filename:output_filename")
+    county_flag := flag.String("county", "", "county map, format input_filename:output_filename")
+    flag.Parse()
+
+    if *h || *help {
+        usage(0)
+    }
+
+    if (*state_flag == "" && *county_flag == "") || flag.NArg() > 0 {
+        usage(1)
+    }
+
+    // 'flag' package is just used for syntax-checking. here we get the actual
+    // data from the command line
+
+    state_map := make([]string, s.Count(s.Join(os.Args, " "), "-state"))
+    county_map := make([]string, s.Count(s.Join(os.Args, " "), "-county"))
+    nstates := 0
+    ncounties := 0
+    for arg_i, arg := range os.Args {
+        if arg == "-state" {
+            state_map[nstates] = os.Args[arg_i+1]
+            nstates++
+        } else if arg == "-county" {
+            county_map[ncounties] = os.Args[arg_i+1]
+            ncounties++
+        }
     }
 
     jsoncfg, err := ioutil.ReadFile("config.json")
-    if err != nil {
-        panic(err)
-    }
-
-    mapsvg, err := ioutil.ReadFile(os.Args[1])
     if err != nil {
         panic(err)
     }
@@ -111,39 +175,77 @@ func main() {
     for k, _ := range config.Colours {
         k_i, _ := strconv.ParseInt(k, 0, 64)
         mincount[i] = int(k_i)
-	i++
+        i++
     }
 
     sort.Sort(IntArray(mincount))
 
-    mapsvg_obj := svgxml.XML2SVG(mapsvg)
-    if mapsvg_obj == nil {
-        os.Exit(1)
-    }
-
-    re_fill, err := regexp.Compile(`(fill:#)......`)
+    re_fill, err := re.Compile(`(fill:#)......`)
     if err != nil {
         panic(err)
     }
 
-    state, _ := db_data()
-
-    for state, state_count := range state {
-	for _, mc := range mincount {
-	    if state_count >= mc {
-		element := svgxml.FindPathById(mapsvg_obj, state)
-		if element != nil {
-		    element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}" + config.Colours[strconv.Itoa(mc)])))
-		} else {
-		    fmt.Fprintf(os.Stderr, "'%s' not found\n", state)
-		}
-
-	    }
-	}
+    re_svgext, err := re.Compile(`\.svg$`)
+    if err != nil {
+        panic(err)
     }
 
+    state_data, _ := db_data()
 
-    fmt.Println(string(svgxml.SVG2XML(mapsvg_obj, true)))
+    // fmt.Println(state_data, county_data)
+
+    for _, mapset := range state_map {
+        wg.Add(1)
+        fmt.Println(mapset)
+        go func(filenames string) {
+
+            defer wg.Done()
+            // fn = [infile, outfile]
+            fn := s.Split(filenames, ":")
+            mapsvg, err := ioutil.ReadFile(fn[0])
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "can't read '" + fn[0] + "': " + err.Error())
+                return
+            }
+            svg_coloured := colour_svgdata(mapsvg, state_data, re_fill, config.Colours, mincount)
+            if svg_coloured == ":SVGERR" {
+                fmt.Fprintf(os.Stderr, "can't create SVG object from " + fn[0])
+                return
+            }
+            ret := re_svgext.Find([]byte(fn[1]))
+            if ret == nil {
+                // going to call ImageMagick's 'convert' because I can't find
+                // a damn SVG package that can write to a non-SVG image and I
+                // don't have the chops to write one.
+                cmd := exec.Command("convert", "svg:-", fn[1])
+                convert_stdin, err := cmd.StdinPipe()
+                if err != nil {
+                    log.Fatal(err)
+                }
+                go func() {
+                    defer convert_stdin.Close()
+                    io.WriteString(convert_stdin, svg_coloured)
+                }()
+                out, err := cmd.CombinedOutput()
+                if err != nil {
+                    log.Fatal(err)
+                }
+                fmt.Println(out)
+            } else {
+                // just going back to an SVG file
+                err := ioutil.WriteFile(fn[1], []byte(svg_coloured), 0666)
+                if err != nil {
+                    fmt.Fprintf(os.Stderr, "can't write to '" + fn[1] + "': " + err.Error())
+                    return
+                }
+            }
+
+        }(mapset)
+    }
+
+    wg.Wait()
+
+    // fmt.Println(string(svgxml.SVG2XML(mapsvg_obj, true)))
 
 }
 
