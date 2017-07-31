@@ -226,11 +226,10 @@ func main() {
                     defer convert_stdin.Close()
                     io.WriteString(convert_stdin, svg_coloured)
                 }()
-                out, err := cmd.CombinedOutput()
+                _, err = cmd.CombinedOutput()
                 if err != nil {
                     log.Fatal(err)
                 }
-                fmt.Println(out)
             } else {
                 // just going back to an SVG file
                 err := ioutil.WriteFile(fn[1], []byte(svg_coloured), 0666)
