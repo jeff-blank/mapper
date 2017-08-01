@@ -8,14 +8,16 @@ import (
 )
 
 type PathDef struct {
-    D       string `xml:"d,attr"`
-    Id      string `xml:"id,attr"`
-    Style   string `xml:"style,attr"`
+    D       string  `xml:"d,attr"`
+    Id      string  `xml:"id,attr"`
+    Style   string  `xml:"style,attr"`
 }
 
 type GroupDef struct {
-    Path []PathDef  `xml:"path"`
-    Id   string     `xml:"id,attr"`
+    Path    []PathDef   `xml:"path"`
+    Id      string      `xml:"id,attr"`
+    Xform   string      `xml:"transform,attr"`
+    Style   string      `xml:"style,attr"`
 }
 
 type DefsDef struct {
@@ -23,14 +25,15 @@ type DefsDef struct {
 }
 
 type SVG struct {
-    XMLName     xml.Name    `xml:"svg"`
-    XMLNS       string      `xml:"xmlns,attr"`
-    Width       string      `xml:"width,attr"`
-    Height      string      `xml:"height,attr"`
-    Id          string      `xml:"id,attr"`
-    G           []GroupDef  `xml:"g"`
-    Defs        DefsDef     `xml:"defs"`
-    Version     string      `xml:"version,attr"`
+    XMLName xml.Name    `xml:"svg"`
+    XMLNS   string      `xml:"xmlns,attr"`
+    Width   string      `xml:"width,attr"`
+    Height  string      `xml:"height,attr"`
+    Id      string      `xml:"id,attr"`
+    G       []GroupDef  `xml:"g"`
+    Path    []PathDef   `xml:"path"`
+    Defs    DefsDef     `xml:"defs"`
+    Version string      `xml:"version,attr"`
 }
 
 func XML2SVG(svg_xml []byte)(*SVG) {
