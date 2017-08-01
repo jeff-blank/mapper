@@ -190,56 +190,68 @@ func main() {
         panic(err)
     }
 
-    state_data, _ := db_data()
+    state_data, county_data := db_data()
 
     // fmt.Println(state_data, county_data)
 
-    for _, mapset := range state_map {
-        wg.Add(1)
-        fmt.Println(mapset)
-        go func(filenames string) {
+    for _, datatype := range [2]string{"state", "county"} {
+        var maps []string
+        var data map[string]int
 
-            defer wg.Done()
-            // fn = [infile, outfile]
-            fn := s.Split(filenames, ":")
-            mapsvg, err := ioutil.ReadFile(fn[0])
-            if err != nil {
-                fmt.Fprintf(os.Stderr, "can't read '" + fn[0] + "': " + err.Error())
-                return
-            }
-            svg_coloured := colour_svgdata(mapsvg, state_data, re_fill, config.Colours, mincount)
-            if svg_coloured == ":SVGERR" {
-                fmt.Fprintf(os.Stderr, "can't create SVG object from " + fn[0])
-                return
-            }
-            ret := re_svgext.Find([]byte(fn[1]))
-            if ret == nil {
-                // going to call ImageMagick's 'convert' because I can't find
-                // a damn SVG package that can write to a non-SVG image and I
-                // don't have the chops to write one.
-                cmd := exec.Command("convert", "svg:-", fn[1])
-                convert_stdin, err := cmd.StdinPipe()
+        if datatype == "state" {
+            maps = state_map
+            data = state_data
+        } else {
+            maps = county_map
+            data = county_data
+        }
+
+        for _, mapset := range maps {
+            wg.Add(1)
+            go func(filenames string) {
+
+                defer wg.Done()
+                // fn = [infile, outfile]
+                fn := s.Split(filenames, ":")
+                mapsvg, err := ioutil.ReadFile(fn[0])
                 if err != nil {
-                    log.Fatal(err)
-                }
-                go func() {
-                    defer convert_stdin.Close()
-                    io.WriteString(convert_stdin, svg_coloured)
-                }()
-                _, err = cmd.CombinedOutput()
-                if err != nil {
-                    log.Fatal(err)
-                }
-            } else {
-                // just going back to an SVG file
-                err := ioutil.WriteFile(fn[1], []byte(svg_coloured), 0666)
-                if err != nil {
-                    fmt.Fprintf(os.Stderr, "can't write to '" + fn[1] + "': " + err.Error())
+                    fmt.Fprintf(os.Stderr, "can't read '" + fn[0] + "': " + err.Error())
                     return
                 }
-            }
+                svg_coloured := colour_svgdata(mapsvg, data, re_fill, config.Colours, mincount)
+                if svg_coloured == ":SVGERR" {
+                    fmt.Fprintf(os.Stderr, "can't create SVG object from " + fn[0])
+                    return
+                }
+                ret := re_svgext.Find([]byte(fn[1]))
+                if ret == nil {
+                    // going to call ImageMagick's 'convert' because I can't find
+                    // a damn SVG package that can write to a non-SVG image and I
+                    // don't have the chops to write one.
+                    cmd := exec.Command("convert", "svg:-", fn[1])
+                    convert_stdin, err := cmd.StdinPipe()
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    go func() {
+                        defer convert_stdin.Close()
+                        io.WriteString(convert_stdin, svg_coloured)
+                    }()
+                    _, err = cmd.CombinedOutput()
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                } else {
+                    // just going back to an SVG file
+                    err := ioutil.WriteFile(fn[1], []byte(svg_coloured), 0666)
+                    if err != nil {
+                        fmt.Fprintf(os.Stderr, "can't write to '" + fn[1] + "': " + err.Error())
+                        return
+                    }
+                }
 
-        }(mapset)
+            }(mapset)
+        }
     }
 
     wg.Wait()
