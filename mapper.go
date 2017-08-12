@@ -216,4 +216,5 @@ func main() {
 
 }
 
-// ex:ai:sw=4:ts=8:
+// vim:ts=4:et:
+// ex:ai:sw=4:ts=1000:
