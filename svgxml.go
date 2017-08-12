@@ -24,6 +24,21 @@ type DefsDef struct {
     Id  string  `xml:"id,attr"`
 }
 
+type TSpanDef struct {
+    Id      string  `xml:"id,attr"`
+    X       string  `xml:"x,attr"`
+    Y       string  `xml:"y,attr"`
+    Label   string  `xml:",chardata"`
+}
+
+type TextDef struct {
+    Style   string      `xml:"style,attr"`
+    X       string      `xml:"x,attr"`
+    Y       string      `xml:"y,attr"`
+    Id      string      `xml:"id,attr"`
+    TSpan   TSpanDef    `xml:"tspan"`
+}
+
 type SVG struct {
     XMLName xml.Name    `xml:"svg"`
     XMLNS   string      `xml:"xmlns,attr"`
@@ -34,6 +49,7 @@ type SVG struct {
     Path    []PathDef   `xml:"path"`
     Defs    DefsDef     `xml:"defs"`
     Version string      `xml:"version,attr"`
+    Text    []TextDef   `xml:"text"`
 }
 
 func XML2SVG(svg_xml []byte)(*SVG) {
@@ -43,7 +59,7 @@ func XML2SVG(svg_xml []byte)(*SVG) {
     if err == nil {
         return &svg_obj
     } else {
-        fmt.Fprintf(os.Stderr, "error: %v", err)
+        fmt.Fprintf(os.Stderr, "error: %v\n", err)
         return nil
     }
 }
@@ -59,7 +75,7 @@ func SVG2XML(imgxml *SVG, multi_line bool)([]byte) {
         xml_txt, err = xml.Marshal(imgxml)
     }
     if err != nil {
-        fmt.Fprintf(os.Stderr, "error: %v", err)
+        fmt.Fprintf(os.Stderr, "error: %v\n", err)
         return nil
     }
 
