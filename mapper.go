@@ -3,7 +3,6 @@ package main
 import (
     "database/sql"
     "encoding/json"
-    "flag"
     "fmt"
     "log"
     "io"
@@ -20,7 +19,8 @@ import (
 )
 
 type Config struct {
-    Colours map[string]string `json:"colours"`
+    Colours map[string]string                       `json:"colours"`
+    Maps    map[string]map[string]map[string]string `json:"maps"`
 }
 
 type DbConfig struct {
@@ -95,12 +95,6 @@ func db_data() (map[string]int, map[string]int) {
 
 }
 
-func usage(exit_status int) {
-    flag.PrintDefaults()
-    fmt.Fprintf(os.Stderr, "\n  -state and -county may be specified multiple times\n\nAdditional parameters: none\n")
-    os.Exit(exit_status)
-}
-
 func colour_svgdata(mapsvg []byte, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) (string) {
     mapsvg_obj := svgxml.XML2SVG(mapsvg)
     if mapsvg_obj == nil {
@@ -126,37 +120,6 @@ func main() {
 
     var config  Config
     var wg      sync.WaitGroup
-
-    h := flag.Bool("h", false, "usage information")
-    help := flag.Bool("help", false, "usage information")
-    state_flag := flag.String("state", "", "state map(s), format input_filename:output_filename")
-    county_flag := flag.String("county", "", "county map, format input_filename:output_filename")
-    flag.Parse()
-
-    if *h || *help {
-        usage(0)
-    }
-
-    if (*state_flag == "" && *county_flag == "") || flag.NArg() > 0 {
-        usage(1)
-    }
-
-    // 'flag' package is just used for syntax-checking. here we get the actual
-    // data from the command line
-
-    state_map := make([]string, s.Count(s.Join(os.Args, " "), "-state"))
-    county_map := make([]string, s.Count(s.Join(os.Args, " "), "-county"))
-    nstates := 0
-    ncounties := 0
-    for arg_i, arg := range os.Args {
-        if arg == "-state" {
-            state_map[nstates] = os.Args[arg_i+1]
-            nstates++
-        } else if arg == "-county" {
-            county_map[ncounties] = os.Args[arg_i+1]
-            ncounties++
-        }
-    }
 
     jsoncfg, err := ioutil.ReadFile("config.json")
     if err != nil {
@@ -192,43 +155,36 @@ func main() {
 
     state_data, county_data := db_data()
 
-    // fmt.Println(state_data, county_data)
-
-    for _, datatype := range [2]string{"state", "county"} {
-        var maps []string
+    for maptype, mapset := range config.Maps {
         var data map[string]int
 
-        if datatype == "state" {
-            maps = state_map
+        if maptype == "states" {
             data = state_data
         } else {
-            maps = county_map
             data = county_data
         }
 
-        for _, mapset := range maps {
+        for infile, attrs := range mapset {
             wg.Add(1)
-            go func(filenames string) {
+            go func(srcfile, dstfile, outsize string) {
 
                 defer wg.Done()
-                // fn = [infile, outfile]
-                fn := s.Split(filenames, ":")
-                mapsvg, err := ioutil.ReadFile(fn[0])
+                mapsvg, err := ioutil.ReadFile(srcfile)
                 if err != nil {
-                    fmt.Fprintf(os.Stderr, "can't read '" + fn[0] + "': " + err.Error())
+                    fmt.Fprintf(os.Stderr, "can't read '" + srcfile + "': " + err.Error())
                     return
                 }
                 svg_coloured := colour_svgdata(mapsvg, data, re_fill, config.Colours, mincount)
                 if svg_coloured == ":SVGERR" {
-                    fmt.Fprintf(os.Stderr, "can't create SVG object from " + fn[0])
+                    fmt.Fprintf(os.Stderr, "can't create SVG object from " + srcfile)
                     return
                 }
-                ret := re_svgext.Find([]byte(fn[1]))
+                ret := re_svgext.Find([]byte(dstfile))
                 if ret == nil {
                     // going to call ImageMagick's 'convert' because I can't find
                     // a damn SVG package that can write to a non-SVG image and I
                     // don't have the chops to write one.
-                    cmd := exec.Command("convert", "svg:-", fn[1])
+                    cmd := exec.Command("convert", "svg:-", "-scale", outsize, dstfile)
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
                         log.Fatal(err)
@@ -243,14 +199,14 @@ func main() {
                     }
                 } else {
                     // just going back to an SVG file
-                    err := ioutil.WriteFile(fn[1], []byte(svg_coloured), 0666)
+                    err := ioutil.WriteFile(dstfile, []byte(svg_coloured), 0666)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't write to '" + fn[1] + "': " + err.Error())
+                        fmt.Fprintf(os.Stderr, "can't write to '" + dstfile + "': " + err.Error())
                         return
                     }
                 }
 
-            }(mapset)
+            }(infile, attrs["outfile"], attrs["outsize"])
         }
     }
 

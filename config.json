@@ -1,11 +1,31 @@
-{"colours":{
-  "0":  "d0d0d0",
-  "1":  "40ffff",
-  "2":  "00a0ff",
-  "3":  "a080ff",
-  "6":  "ff40d0",
-  "10": "ff8585",
-  "20": "d24411",
-  "50": "ff0000",
-  "100":"f0f020"
-}}
+{
+  "colours":{
+    "0":  "d0d0d0",
+    "1":  "40ffff",
+    "2":  "00a0ff",
+    "3":  "a080ff",
+    "6":  "ff40d0",
+    "10": "ff8585",
+    "20": "d24411",
+    "50": "ff0000",
+    "100":"f0f020"
+  },
+  "maps":{
+    "states":{
+      "usmap.svg":{
+        "outfile":"usmap.png",
+        "outsize":"600x388"
+      }
+    },
+    "counties":{
+      "uscounties.svg":{
+        "outfile":"uscounties.png",
+        "outsize":"1440x912"
+      },
+      "counties-uppermidwest.svg":{
+        "outfile":"counties-uppermidwest.png",
+        "outsize":"600x676"
+      }
+    }
+  }
+}
