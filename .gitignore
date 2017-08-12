@@ -17,3 +17,7 @@
 *.swp
 
 dbconfig.json
+*.svg
+*.png
+playground/
+mapper
