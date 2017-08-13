@@ -37,8 +37,8 @@ the path names in the "state" map(s) for the code to work as written.
 
 ## Database configuration
 
-The database configuration should be in `dbconfig.json`, which is not
-provided in the repository. Use the following format:
+The database configuration should be in `dbconfig.json`, which is
+provided as [example-dbconfig.json].
 
 ```
 {
