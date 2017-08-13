@@ -95,5 +95,5 @@ select s.abbr, c.name, count(c.name) from events group by s.abbr, c.name
 ```
 
 Also untested, but `tally_column` should work as a regular column containing
-a number, provided each state/county combination occurs only once. In that
+a number, provided each state/county combination occurs only once. In this
 case, `group_by` would presumably be an empty string.
