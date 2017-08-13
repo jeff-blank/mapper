@@ -84,16 +84,22 @@ Untested, but multiple-table access should work like this:
     "state_column":     "s.abbr",
     "county_column":    "c.name",
     "tally_column":     "count(c.name) as count",
-    "tables":           "state s, county c",
-    "where":            "where c.state_id = s.id",
+    "tables":           "state s, county c, events e",
+    "where":            "where e.county_id = c.id and c.state_id = s.id",
     "group_by":         "group by s.abbr, c.name"
   }
 }
 ```
 
+Leading to...
+
 ```sql
-select s.abbr, c.name, count(c.name) from events group by s.abbr, c.name
+select s.abbr, c.name, count(c.name) from state s, county c, events e
+  where e.county_id = c.id and c.state_id = s.id
+  group by s.abbr, c.name
 ```
+
+...which may or may not work&mdash;I'm just spitballin' here.
 
 Also untested, but `tally_column` should work as a regular column containing
 a number, provided each state/county combination occurs only once. In this
