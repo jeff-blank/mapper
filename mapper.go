@@ -95,11 +95,9 @@ func db_data() (map[string]int, map[string]int) {
 
 }
 
-func colour_svgdata(mapsvg []byte, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) (string) {
-    mapsvg_obj := svgxml.XML2SVG(mapsvg)
-    if mapsvg_obj == nil {
-        return ":SVGERR"
-    }
+func colour_svgdata(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) (string, []string) {
+
+    var errors []string
 
     for id, count := range data {
         for _, mc := range mincount {
@@ -108,12 +106,12 @@ func colour_svgdata(mapsvg []byte, data map[string]int, re_fill *re.Regexp, colo
                 if element != nil {
                     element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}" + colours[strconv.Itoa(mc)])))
                 } else {
-                    fmt.Fprintf(os.Stderr, "'%s' not found\n", id)
+                    errors = append(errors, "'" + id + "' not found")
                 }
             }
         }
     }
-    return string(svgxml.SVG2XML(mapsvg_obj, true))
+    return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
 func main() {
@@ -166,19 +164,74 @@ func main() {
 
         for infile, attrs := range mapset {
             wg.Add(1)
-            go func(srcfile, dstfile, outsize string) {
+            go func(srcfile, dstfile, outsize, maptype string, mapdata map[string]int) {
+
+                var county_data_new map[string]int
 
                 defer wg.Done()
+                defer os.Stderr.Close()
+
                 mapsvg, err := ioutil.ReadFile(srcfile)
                 if err != nil {
                     fmt.Fprintf(os.Stderr, "can't read '" + srcfile + "': " + err.Error())
                     return
                 }
-                svg_coloured := colour_svgdata(mapsvg, data, re_fill, config.Colours, mincount)
-                if svg_coloured == ":SVGERR" {
+
+                mapsvg_obj := svgxml.XML2SVG(mapsvg)
+                if mapsvg_obj == nil {
                     fmt.Fprintf(os.Stderr, "can't create SVG object from " + srcfile)
                     return
                 }
+
+                if maptype == "counties" {
+                    // This block has the effect of pruning county data for
+                    // *states* that don't appear in the given map. This is so
+                    // that counties in states outside the map don't cause
+                    // error messages and counties in the map that have a
+                    // different (incorrect)( name in the data do generate
+                    // errors.
+
+                    var map_state_list []string
+
+                    county_data_new = make(map[string]int)
+
+                    // first, make a list of all states in the map using
+                    // state_data as the source of state names
+                    for _, g := range mapsvg_obj.G {
+                        for state, _ := range state_data {
+                            if s.Index(g.Id, state + "_") == 0 {
+                                map_state_list = append(map_state_list, state + "_")
+                            }
+                        }
+                    }
+
+                    // next, search county names in data for states found in
+                    // the map and copy only county data entries for those
+                    // found states
+                    for state_county, sc_count := range mapdata {
+                        found_state := false
+                        for _, state_ := range map_state_list {
+                            if s.Index(state_county, state_) == 0 {
+                                found_state = true
+                                break
+                            }
+                        }
+                        if found_state == true {
+                            county_data_new[state_county] = sc_count
+                        }
+                    }
+
+                    // replace the function-local dataset with the pruned data
+                    mapdata = county_data_new
+                }
+
+                svg_coloured, errlist := colour_svgdata(mapsvg_obj, mapdata, re_fill, config.Colours, mincount)
+                if len(errlist) > 0 {
+                    for _, errmsg := range errlist {
+                        fmt.Fprintf(os.Stderr, "%s: %s\n", srcfile, errmsg)
+                    }
+                }
+
                 ret := re_svgext.Find([]byte(dstfile))
                 if ret == nil {
                     // going to call ImageMagick's 'convert' because I can't find
@@ -206,7 +259,7 @@ func main() {
                     }
                 }
 
-            }(infile, attrs["outfile"], attrs["outsize"])
+            }(infile, attrs["outfile"], attrs["outsize"], maptype, data)
         }
     }
 
