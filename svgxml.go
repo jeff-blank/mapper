@@ -59,7 +59,7 @@ func XML2SVG(svg_xml []byte)(*SVG) {
     if err == nil {
         return &svg_obj
     } else {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stderr, "xml.Unmarshal error: %v\n", err)
         return nil
     }
 }
@@ -75,7 +75,7 @@ func SVG2XML(imgxml *SVG, multi_line bool)([]byte) {
         xml_txt, err = xml.Marshal(imgxml)
     }
     if err != nil {
-        fmt.Fprintf(os.Stderr, "error: %v\n", err)
+        fmt.Fprintf(os.Stderr, "xml.Marshal error: %v\n", err)
         return nil
     }
 
