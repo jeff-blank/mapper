@@ -7,11 +7,9 @@ for the states. Any naming/abbreviating convention can be used as long as it
 matches what is produced by the database query (see next section). The paths
 are expected to be found in the following SVG structure:
 
-`<svg ...>
-  <g ...>
-    <path id="state" style="...fill:#XXXXXX" />
-  </g>
-</svg>`
+```xml
+<svg ...> <g ...> <path id="state" style="...fill:#XXXXXX" /> </g> </svg>
+```
 
 An SVG file of counties should be structured the same way, except that the
 path ids should be `"state_county_name"`&mdash;in other words, the state (as
@@ -40,7 +38,7 @@ the path names in the "state" map(s) for the code to work as written.
 The database configuration should be in `dbconfig.json`, which is
 provided as [example-dbconfig.json](example-dbconfig.json).
 
-```
+```json
 {
   "db_server":{
     "dbtype":     "postgres",
@@ -65,21 +63,23 @@ provided as [example-dbconfig.json](example-dbconfig.json).
 
 `db_server` and `db_creds` map into the call to `sql.Open()` as follows:
 
-```
-... sql.Open(dbtype, "dbtype://username:password@dbhost/dbname?sslmode=require")
+```go
+dbh, err := sql.Open(dbtype, "dbtype://username:password@dbhost/dbname?sslmode=require")
 ```
 
 The idea for the `db_schema` section is to get rows of the format
 `state_name | county_name | county_tally`.  The above `db_schema` results in
 a query that looks like this:
 
-```
+```sql
 select state, county, count(county) from events group by state, county
 ```
 
 Untested, but multiple-table access should work like this:
 
-```
+```json
+{
+  ...
   "db_schema":{
     "state_column":     "s.abbr",
     "county_column":    "c.name",
@@ -88,9 +88,10 @@ Untested, but multiple-table access should work like this:
     "where":            "where c.state_id = s.id",
     "group_by":         "group by s.abbr, c.name"
   }
+}
 ```
 
-```
+```sql
 select s.abbr, c.name, count(c.name) from events group by s.abbr, c.name
 ```
 
