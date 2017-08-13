@@ -14,7 +14,7 @@ are expected to be found in the following SVG structure:
 </svg>`
 
 An SVG file of counties should be structured the same way, except that the
-path ids should be `"state_county_name"`; in other words, the state (as
+path ids should be `"state_county_name"`&mdash;in other words, the state (as
 found in the database), an underscore, and the county name as found in
 the database. Due to the SVG files I use, there is code in `mapper` to
 transform all spaces to underscores before searching the SVG file for
