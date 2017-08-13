@@ -9,7 +9,7 @@ are expected to be found in the following SVG structure:
 
 `<svg ...>
   <g ...>
-    <path id="state" />
+    <path id="state" style="...fill:#XXXXXX" />
   </g>
 </svg>`
 
@@ -45,7 +45,7 @@ provided in the repository. Use the following format:
   "db_server":{
     "dbtype":     "postgres",
     "dbname":     "your database name",
-    "dbhost":     "dbserver.example.com"
+    "dbhost":     "dbserver.example.com",
     "dbopts":     "?sslmode=require"
   },
   "db_creds":{
@@ -94,6 +94,6 @@ Untested, but multiple-table access should work like this:
 select s.abbr, c.name, count(c.name) from events group by s.abbr, c.name
 ```
 
-In any case, the `db_data()` function counts by the number of rows containing
-each county. There is currently no facility for keeping counts in another
-column.
+Also untested, but `tally_column` should work as a regular column containing
+a number, provided each state/county combination occurs only once. In that
+case, `group_by` would presumably be an empty string.
