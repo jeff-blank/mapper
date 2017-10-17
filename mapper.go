@@ -237,7 +237,7 @@ func main() {
                     // going to call ImageMagick's 'convert' because I can't find
                     // a damn SVG package that can write to a non-SVG image and I
                     // don't have the chops to write one.
-                    cmd := exec.Command("convert", "svg:-", "-scale", outsize, dstfile)
+                    cmd := exec.Command("convert", "svg:-", "-resize", outsize, dstfile)
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
                         log.Fatal(err)
@@ -264,8 +264,6 @@ func main() {
     }
 
     wg.Wait()
-
-    // fmt.Println(string(svgxml.SVG2XML(mapsvg_obj, true)))
 
 }
 
