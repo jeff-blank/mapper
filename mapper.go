@@ -4,23 +4,29 @@ import (
     "database/sql"
     "encoding/json"
     "fmt"
-    "log"
+    "image"
+    "image/draw"
+    "image/png"
     "io"
     "io/ioutil"
-    re "regexp"
-    "strconv"
+    "log"
     "os"
     "os/exec"
+    re "regexp"
     "sort"
+    "strconv"
     s "strings"
     "sync"
+    "time"
     "jfb/svgxml"
+    "github.com/golang/freetype"
     _ "github.com/lib/pq"
 )
 
 type Config struct {
-    Colours map[string]string                       `json:"colours"`
-    Maps    map[string]map[string]map[string]string `json:"maps"`
+    Colours     map[string]string                       `json:"colours"`
+    DefaultFont string                                  `json:"annotation_font_default"`
+    Maps        map[string]map[string]map[string]string `json:"maps"`
 }
 
 type DbConfig struct {
@@ -164,7 +170,8 @@ func main() {
 
         for infile, attrs := range mapset {
             wg.Add(1)
-            go func(srcfile, dstfile, outsize, maptype string, mapdata map[string]int) {
+            // go func(srcfile, dstfile, outsize, maptype string, mapdata map[string]int)
+            go func(srcfile string, attrs map[string]string, maptype string, mapdata map[string]int) {
 
                 var county_data_new map[string]int
 
@@ -232,12 +239,12 @@ func main() {
                     }
                 }
 
-                ret := re_svgext.Find([]byte(dstfile))
+                ret := re_svgext.Find([]byte(attrs["outfile"]))
                 if ret == nil {
                     // going to call ImageMagick's 'convert' because I can't find
                     // a damn SVG package that can write to a non-SVG image and I
                     // don't have the chops to write one.
-                    cmd := exec.Command("convert", "svg:-", "-resize", outsize, dstfile)
+                    cmd := exec.Command("convert", "svg:-", "-resize", attrs["outsize"], "png:-")
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
                         log.Fatal(err)
@@ -246,20 +253,88 @@ func main() {
                         defer convert_stdin.Close()
                         io.WriteString(convert_stdin, svg_coloured)
                     }()
-                    _, err = cmd.CombinedOutput()
+                    png_data, err := cmd.Output()
                     if err != nil {
+                        log.Fatal(err)
+                    }
+                    png_reader := s.NewReader(string(png_data))
+                    img, _, err := image.Decode(png_reader)
+
+                    /*
+                    ** do stuff with the image here: annotations, legend, etc
+                    */
+
+                    fontfile := config.DefaultFont
+                    if len(attrs["annotation_font_override"]) > 0 {
+                        fontfile = attrs["annotation_font_override"]
+                    }
+                    fontdata, err := ioutil.ReadFile(fontfile)
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    font, err := freetype.ParseFont(fontdata)
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+
+                    ann_x, _ := strconv.ParseInt(attrs["annotation_x"], 10, 64)
+                    ann_y, _ := strconv.ParseInt(attrs["annotation_y"], 10, 64)
+                    b := img.Bounds()
+                    img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+                    draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
+
+                    fontsize, _ := strconv.ParseFloat(attrs["annotation_sz"], 64)
+                    ft_ctx := freetype.NewContext()
+                    ft_ctx.SetDPI(72.0)
+                    ft_ctx.SetFont(font)
+                    ft_ctx.SetFontSize(fontsize)
+                    ft_ctx.SetClip(img_rgba.Bounds())
+                    ft_ctx.SetDst(img_rgba)
+                    ft_ctx.SetSrc(image.Black)
+                    pt := freetype.Pt(int(ann_x), int(ann_y)+int(ft_ctx.PointToFixed(fontsize) >> 6))
+
+                    total_hits := 0;
+                    for _, hits := range mapdata {
+                        total_hits += hits
+                    }
+                    regions := len(mapdata)
+                    if len(attrs["regions_adjust"]) > 0 {
+                        adj, _ := strconv.Atoi(attrs["regions_adjust"])
+                        regions += adj
+                    }
+
+                    annotation := s.Replace(attrs["annotation"], "%t%", strconv.Itoa(total_hits), -1)
+                    annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
+                    if s.Index(annotation, "%T%") >= 0 {
+                        annotation = s.Replace(annotation, "%T%", time.Now().Format(attrs["annotation_timefmt"]), -1)
+                    }
+                    ann_lines := s.Split(annotation, "\n")
+                    for _, line := range ann_lines {
+                        _, err = ft_ctx.DrawString(line, pt)
+                        if err != nil {
+                            log.Fatal(err)
+                        }
+                        pt.Y += ft_ctx.PointToFixed(fontsize * 1.5)
+                    }
+
+                    outfile_handle, err := os.Create(attrs["outfile"])
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    if err := png.Encode(outfile_handle, img_rgba); err != nil {
+                        outfile_handle.Close()
                         log.Fatal(err)
                     }
                 } else {
                     // just going back to an SVG file
-                    err := ioutil.WriteFile(dstfile, []byte(svg_coloured), 0666)
+                    err := ioutil.WriteFile(attrs["outfile"], []byte(svg_coloured), 0666)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't write to '" + dstfile + "': " + err.Error())
+                        fmt.Fprintf(os.Stderr, "can't write to '" + attrs["outfile"] + "': " + err.Error())
                         return
                     }
                 }
 
-            }(infile, attrs["outfile"], attrs["outsize"], maptype, data)
+            }(infile, attrs, maptype, data)
         }
     }
 
