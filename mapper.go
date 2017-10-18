@@ -314,19 +314,48 @@ func main() {
                     img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
                     draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
+                    fontdata_l, err := ioutil.ReadFile("/usr/local/share/fonts/bitstream-vera/Vera.ttf")
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    font_l, err := freetype.ParseFont(fontdata_l)
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    fontsize_l := 12.0
+                    ft_ctx := freetype.NewContext()
+                    ft_ctx.SetDPI(72.0)
+                    ft_ctx.SetFont(font_l)
+                    ft_ctx.SetFontSize(fontsize_l)
+                    ft_ctx.SetClip(b)
+                    ft_ctx.SetDst(img_rgba)
+                    ft_ctx.SetSrc(image.Black)
+
                     legend_elem_width := 48
                     legend_elem_height := 16
                     legend_height := len(config.Colours) * (legend_elem_height + 1) - 1
                     box_x := b.Dx() - legend_elem_width
                     box_y := b.Dy() - legend_height
-                    for _, mc := range mincount {
-                        c_red, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][0:2], 16, 64)
-                        c_green, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][2:4], 16, 64)
-                        c_blue, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][4:6], 16, 64)
+                    for i, mc := range mincount {
+                        c_red, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][0:2], 16, 8)
+                        c_green, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][2:4], 16, 8)
+                        c_blue, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][4:6], 16, 8)
                         fill := color.RGBA{uint8(c_red), uint8(c_green), uint8(c_blue), 255}
                         draw.Draw(img_rgba, image.Rect(box_x, box_y, box_x + legend_elem_width, box_y + legend_elem_height),
                                     &image.Uniform{fill}, image.ZP, draw.Src)
                         box_y += legend_elem_height + 1
+
+                        label := strconv.Itoa(mc)
+                        if i == len(mincount) - 1 {
+                            label = label + "+"
+                        } else if mincount[i+1] != (mc + 1) {
+                            label = label + "-" + strconv.Itoa(mincount[i+1] - 1)
+                        }
+                        fpt := freetype.Pt(box_x + 4, box_y - legend_elem_height + int(ft_ctx.PointToFixed(fontsize_l) >> 6))
+                        _, err = ft_ctx.DrawString(label, fpt)
+                        if err != nil {
+                            log.Fatal(err)
+                        }
                     }
 
                     fontfile := config.DefaultFont
