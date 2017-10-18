@@ -158,7 +158,7 @@ func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data ma
 
     ann_fontdata, err := ioutil.ReadFile(ann_fontfile)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "can't read from font file '%s': %s\n", ann_fontfile, err.Error())
+        fmt.Fprintf(os.Stderr, "can't read from annotation font file '%s': %s\n", ann_fontfile, err.Error())
         os.Exit(1)
     }
     font, err := freetype.ParseFont(ann_fontdata)
@@ -197,6 +197,115 @@ func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data ma
             log.Fatal(err)
         }
         pt.Y += ft_ctx.PointToFixed(fontsize * 1.5)
+    }
+}
+
+func ah_hates_legends(img *image.RGBA, mincount []int, colours, defaults, attrs map[string]string) {
+    fontfile := defaults["legend_fontfile"]
+    fontsize_str := defaults["legend_fontsize"]
+    gravity := defaults["legend_gravity"]
+    orient := defaults["legend_orient"]
+    cell_w_str := defaults["legend_cell_width"]
+    cell_h_str := defaults["legend_cell_height"]
+    cell_gap_str := defaults["legend_cell_gap"]
+
+    if len(attrs["legend_fontfile"]) > 0 {
+        fontfile = attrs["legend_fontfile"]
+    }
+
+    if len(attrs["legend_fontsize"]) > 0 {
+        fontsize_str = attrs["legend_fontsize"]
+    }
+    fontsize, _ := strconv.ParseFloat(fontsize_str, 64)
+
+    if len(attrs["legend_gravity"]) > 0 {
+        gravity = attrs["legend_gravity"]
+    }
+
+    if len(attrs["legend_orient"]) > 0 {
+        orient = attrs["legend_orient"]
+    }
+
+    if len(attrs["legend_cell_width"]) > 0 {
+        cell_w_str = attrs["legend_cell_width"]
+    }
+    cell_w, _ := strconv.Atoi(cell_w_str)
+    if len(attrs["legend_cell_height"]) > 0 {
+        cell_h_str = attrs["legend_cell_height"]
+    }
+    cell_h, _ := strconv.Atoi(cell_h_str)
+    if len(attrs["legend_cell_gap"]) > 0 {
+        cell_gap_str = attrs["legend_cell_gap"]
+    }
+    cell_gap, _ := strconv.Atoi(cell_gap_str)
+
+    fontdata, err := ioutil.ReadFile(fontfile)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "can't read from legend font file '%s': %s\n", fontfile, err.Error())
+        os.Exit(1)
+    }
+    font, err := freetype.ParseFont(fontdata)
+    if err != nil {
+        log.Fatal(err)
+    }
+    b := img.Bounds()
+    ft_ctx := freetype.NewContext()
+    ft_ctx.SetDPI(72.0)
+    ft_ctx.SetFont(font)
+    ft_ctx.SetFontSize(fontsize)
+    ft_ctx.SetClip(b)
+    ft_ctx.SetDst(img)
+    ft_ctx.SetSrc(image.Black)
+
+    legend_width := cell_w
+    legend_height := cell_h
+    if orient == "vertical" {
+        legend_height = len(colours) * (cell_h + cell_gap) - cell_gap
+    } else {
+        legend_width = len(colours) * (cell_w + cell_gap) - cell_gap
+    }
+
+    box_x := 0
+    box_y := 0
+    if s.ToLower(gravity)[0] == 's' {
+        box_y = b.Dy() - legend_height
+    }
+    if s.ToLower(gravity)[1] == 'e' {
+        box_x = b.Dx() - legend_width
+    }
+
+    for i, mc := range mincount {
+        c_red, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][0:2], 16, 8)
+        c_green, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][2:4], 16, 8)
+        c_blue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
+        fill := color.RGBA{uint8(c_red), uint8(c_green), uint8(c_blue), 255}
+        draw.Draw(img, image.Rect(box_x, box_y, box_x + cell_w, box_y + cell_h),
+                    &image.Uniform{fill}, image.ZP, draw.Src)
+        if orient == "vertical" {
+            box_y += cell_h + cell_gap
+        } else {
+            box_x += cell_w + cell_gap
+        }
+
+        label := strconv.Itoa(mc)
+        if i == len(mincount) - 1 {
+            label = label + "+"
+        } else if mincount[i+1] != (mc + 1) {
+            label = label + "-" + strconv.Itoa(mincount[i+1] - 1)
+        }
+        var text_x, text_y int
+        if orient == "vertical" {
+            text_x = box_x + 4
+            text_y = box_y - cell_h + int(ft_ctx.PointToFixed(fontsize) >> 6)
+        } else {
+            text_x = box_x - cell_w + 4
+            text_y = box_y + int(ft_ctx.PointToFixed(fontsize) >> 6)
+        }
+        fpt := freetype.Pt(text_x, text_y)
+        _, err = ft_ctx.DrawString(label, fpt)
+        if err != nil {
+            log.Fatal(err)
+        }
     }
 }
 
@@ -345,49 +454,7 @@ func main() {
                     img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
                     draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
-                    fontdata_l, err := ioutil.ReadFile("/usr/local/share/fonts/bitstream-vera/Vera.ttf")
-                    if err != nil {
-                        log.Fatal(err)
-                    }
-                    font_l, err := freetype.ParseFont(fontdata_l)
-                    if err != nil {
-                        log.Fatal(err)
-                    }
-                    fontsize_l := 12.0
-                    ft_ctx := freetype.NewContext()
-                    ft_ctx.SetDPI(72.0)
-                    ft_ctx.SetFont(font_l)
-                    ft_ctx.SetFontSize(fontsize_l)
-                    ft_ctx.SetClip(b)
-                    ft_ctx.SetDst(img_rgba)
-                    ft_ctx.SetSrc(image.Black)
-
-                    legend_elem_width := 48
-                    legend_elem_height := 16
-                    legend_height := len(config.Colours) * (legend_elem_height + 1) - 1
-                    box_x := b.Dx() - legend_elem_width
-                    box_y := b.Dy() - legend_height
-                    for i, mc := range mincount {
-                        c_red, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][0:2], 16, 8)
-                        c_green, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][2:4], 16, 8)
-                        c_blue, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][4:6], 16, 8)
-                        fill := color.RGBA{uint8(c_red), uint8(c_green), uint8(c_blue), 255}
-                        draw.Draw(img_rgba, image.Rect(box_x, box_y, box_x + legend_elem_width, box_y + legend_elem_height),
-                                    &image.Uniform{fill}, image.ZP, draw.Src)
-                        box_y += legend_elem_height + 1
-
-                        label := strconv.Itoa(mc)
-                        if i == len(mincount) - 1 {
-                            label = label + "+"
-                        } else if mincount[i+1] != (mc + 1) {
-                            label = label + "-" + strconv.Itoa(mincount[i+1] - 1)
-                        }
-                        fpt := freetype.Pt(box_x + 4, box_y - legend_elem_height + int(ft_ctx.PointToFixed(fontsize_l) >> 6))
-                        _, err = ft_ctx.DrawString(label, fpt)
-                        if err != nil {
-                            log.Fatal(err)
-                        }
-                    }
+                    ah_hates_legends(img_rgba, mincount, config.Colours, config.LADefaults, attrs)
 
                     annotate(img_rgba, config.LADefaults, attrs, mapdata)
                     outfile_handle, err := os.Create(attrs["outfile"])
