@@ -26,7 +26,7 @@ import (
 
 type Config struct {
     Colours     map[string]string                       `json:"colours"`
-    DefaultFont string                                  `json:"annotation_font_default"`
+    LADefaults  map[string]string                       `json:"legend_annotation_defaults"`
     Maps        map[string]map[string]map[string]string `json:"maps"`
 }
 
@@ -121,20 +121,51 @@ func colour_svgdata(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Reg
     return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
-func annotate(img *image.RGBA, fontfile string, attrs map[string]string, data map[string]int) {
-    fontdata, err := ioutil.ReadFile(fontfile)
-    if err != nil {
-        log.Fatal(err)
+func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data map[string]int) {
+
+    ann_x_str       := legend_anno_dfl["annotation_x"]
+    ann_y_str       := legend_anno_dfl["annotation_y"]
+    ann_timefmt     := legend_anno_dfl["annotation_timefmt"]
+    ann_fontfile    := legend_anno_dfl["annotation_fontfile"]
+    ann_fontsz_str  := legend_anno_dfl["annotation_sz"]
+    ann_str         := legend_anno_dfl["annotation_str"]
+
+    if len(attrs["annotation_x"]) > 0 {
+        ann_x_str = attrs["annotation_x"]
     }
-    font, err := freetype.ParseFont(fontdata)
+    if len(attrs["annotation_y"]) > 0 {
+        ann_y_str = attrs["annotation_y"]
+    }
+    ann_x, err := strconv.Atoi(ann_x_str)
+    ann_y, err := strconv.Atoi(ann_y_str)
+
+    if len(attrs["annotation_fontfile"]) > 0 {
+        ann_fontfile = attrs["annotation_fontfile"]
+    }
+
+    if len(attrs["annotation_fontsize"]) > 0 {
+        ann_fontsz_str = attrs["annotation_sz"]
+    }
+    fontsize, _ := strconv.ParseFloat(ann_fontsz_str, 64)
+
+    if len(attrs["annotation_timefmt"]) > 0 {
+        ann_timefmt = attrs["annotation_timefmt"]
+    }
+
+    if len(attrs["annotation_str"]) > 0 {
+        ann_str = attrs["annotation_str"]
+    }
+
+    ann_fontdata, err := ioutil.ReadFile(ann_fontfile)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "can't read from font file '%s': %s\n", ann_fontfile, err.Error())
+        os.Exit(1)
+    }
+    font, err := freetype.ParseFont(ann_fontdata)
     if err != nil {
         log.Fatal(err)
     }
 
-    ann_x, _ := strconv.ParseInt(attrs["annotation_x"], 10, 64)
-    ann_y, _ := strconv.ParseInt(attrs["annotation_y"], 10, 64)
-
-    fontsize, _ := strconv.ParseFloat(attrs["annotation_sz"], 64)
     ft_ctx := freetype.NewContext()
     ft_ctx.SetDPI(72.0)
     ft_ctx.SetFont(font)
@@ -154,10 +185,10 @@ func annotate(img *image.RGBA, fontfile string, attrs map[string]string, data ma
         regions += adj
     }
 
-    annotation := s.Replace(attrs["annotation"], "%t%", strconv.Itoa(total_hits), -1)
+    annotation := s.Replace(ann_str, "%t%", strconv.Itoa(total_hits), -1)
     annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
     if s.Index(annotation, "%T%") >= 0 {
-        annotation = s.Replace(annotation, "%T%", time.Now().Format(attrs["annotation_timefmt"]), -1)
+        annotation = s.Replace(annotation, "%T%", time.Now().Format(ann_timefmt), -1)
     }
     ann_lines := s.Split(annotation, "\n")
     for _, line := range ann_lines {
@@ -358,16 +389,11 @@ func main() {
                         }
                     }
 
-                    fontfile := config.DefaultFont
-                    if len(attrs["annotation_font_override"]) > 0 {
-                        fontfile = attrs["annotation_font_override"]
-                    }
-
-                    annotate(img_rgba, fontfile, attrs, mapdata)
-
+                    annotate(img_rgba, config.LADefaults, attrs, mapdata)
                     outfile_handle, err := os.Create(attrs["outfile"])
                     if err != nil {
-                        log.Fatal(err)
+                        fmt.Fprintf(os.Stderr, "can't create '" + attrs["outfile"] + "': " + err.Error())
+                        return
                     }
                     if err := png.Encode(outfile_handle, img_rgba); err != nil {
                         outfile_handle.Close()
