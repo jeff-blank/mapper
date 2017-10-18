@@ -120,6 +120,54 @@ func colour_svgdata(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Reg
     return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
+func annotate(img *image.RGBA, fontfile string, attrs map[string]string, data map[string]int) {
+    fontdata, err := ioutil.ReadFile(fontfile)
+    if err != nil {
+        log.Fatal(err)
+    }
+    font, err := freetype.ParseFont(fontdata)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    ann_x, _ := strconv.ParseInt(attrs["annotation_x"], 10, 64)
+    ann_y, _ := strconv.ParseInt(attrs["annotation_y"], 10, 64)
+
+    fontsize, _ := strconv.ParseFloat(attrs["annotation_sz"], 64)
+    ft_ctx := freetype.NewContext()
+    ft_ctx.SetDPI(72.0)
+    ft_ctx.SetFont(font)
+    ft_ctx.SetFontSize(fontsize)
+    ft_ctx.SetClip(img.Bounds())
+    ft_ctx.SetDst(img)
+    ft_ctx.SetSrc(image.Black)
+    pt := freetype.Pt(int(ann_x), int(ann_y)+int(ft_ctx.PointToFixed(fontsize) >> 6))
+
+    total_hits := 0;
+    for _, hits := range data {
+        total_hits += hits
+    }
+    regions := len(data)
+    if len(attrs["regions_adjust"]) > 0 {
+        adj, _ := strconv.Atoi(attrs["regions_adjust"])
+        regions += adj
+    }
+
+    annotation := s.Replace(attrs["annotation"], "%t%", strconv.Itoa(total_hits), -1)
+    annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
+    if s.Index(annotation, "%T%") >= 0 {
+        annotation = s.Replace(annotation, "%T%", time.Now().Format(attrs["annotation_timefmt"]), -1)
+    }
+    ann_lines := s.Split(annotation, "\n")
+    for _, line := range ann_lines {
+        _, err = ft_ctx.DrawString(line, pt)
+        if err != nil {
+            log.Fatal(err)
+        }
+        pt.Y += ft_ctx.PointToFixed(fontsize * 1.5)
+    }
+}
+
 func main() {
 
     var config  Config
@@ -253,12 +301,17 @@ func main() {
                         defer convert_stdin.Close()
                         io.WriteString(convert_stdin, svg_coloured)
                     }()
+
+                    // grab PNG data and cram it into an RGBA image
                     png_data, err := cmd.Output()
                     if err != nil {
                         log.Fatal(err)
                     }
                     png_reader := s.NewReader(string(png_data))
                     img, _, err := image.Decode(png_reader)
+                    b := img.Bounds()
+                    img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+                    draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
                     /*
                     ** do stuff with the image here: annotations, legend, etc
@@ -268,54 +321,8 @@ func main() {
                     if len(attrs["annotation_font_override"]) > 0 {
                         fontfile = attrs["annotation_font_override"]
                     }
-                    fontdata, err := ioutil.ReadFile(fontfile)
-                    if err != nil {
-                        log.Fatal(err)
-                    }
-                    font, err := freetype.ParseFont(fontdata)
-                    if err != nil {
-                        log.Fatal(err)
-                    }
 
-                    ann_x, _ := strconv.ParseInt(attrs["annotation_x"], 10, 64)
-                    ann_y, _ := strconv.ParseInt(attrs["annotation_y"], 10, 64)
-                    b := img.Bounds()
-                    img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
-                    draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
-
-                    fontsize, _ := strconv.ParseFloat(attrs["annotation_sz"], 64)
-                    ft_ctx := freetype.NewContext()
-                    ft_ctx.SetDPI(72.0)
-                    ft_ctx.SetFont(font)
-                    ft_ctx.SetFontSize(fontsize)
-                    ft_ctx.SetClip(img_rgba.Bounds())
-                    ft_ctx.SetDst(img_rgba)
-                    ft_ctx.SetSrc(image.Black)
-                    pt := freetype.Pt(int(ann_x), int(ann_y)+int(ft_ctx.PointToFixed(fontsize) >> 6))
-
-                    total_hits := 0;
-                    for _, hits := range mapdata {
-                        total_hits += hits
-                    }
-                    regions := len(mapdata)
-                    if len(attrs["regions_adjust"]) > 0 {
-                        adj, _ := strconv.Atoi(attrs["regions_adjust"])
-                        regions += adj
-                    }
-
-                    annotation := s.Replace(attrs["annotation"], "%t%", strconv.Itoa(total_hits), -1)
-                    annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
-                    if s.Index(annotation, "%T%") >= 0 {
-                        annotation = s.Replace(annotation, "%T%", time.Now().Format(attrs["annotation_timefmt"]), -1)
-                    }
-                    ann_lines := s.Split(annotation, "\n")
-                    for _, line := range ann_lines {
-                        _, err = ft_ctx.DrawString(line, pt)
-                        if err != nil {
-                            log.Fatal(err)
-                        }
-                        pt.Y += ft_ctx.PointToFixed(fontsize * 1.5)
-                    }
+                    annotate(img_rgba, fontfile, attrs, mapdata)
 
                     outfile_handle, err := os.Create(attrs["outfile"])
                     if err != nil {
