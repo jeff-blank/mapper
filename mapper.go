@@ -3,6 +3,7 @@ package main
 import (
     "database/sql"
     "encoding/json"
+    "flag"
     "fmt"
     "image"
     "image/color"
@@ -24,16 +25,17 @@ import (
     _ "github.com/lib/pq"
 )
 
-type Config struct {
-    Colours     map[string]string                       `json:"colours"`
-    LADefaults  map[string]string                       `json:"legend_annotation_defaults"`
-    Maps        map[string]map[string]map[string]string `json:"maps"`
-}
-
 type DbConfig struct {
     Server      map[string]string       `json:"db_server"`
     Creds       map[string]string       `json:"db_creds"`
     Schema      map[string]string       `json:"db_schema"`
+}
+
+type Config struct {
+    Colours     map[string]string                       `json:"colours"`
+    LADefaults  map[string]string                       `json:"legend_annotation_defaults"`
+    Maps        map[string]map[string]map[string]string `json:"maps"`
+    DbParam     DbConfig                                `json:"database"`
 }
 
 // set up integer array sorting
@@ -43,22 +45,10 @@ func (list IntArray) Swap(a, b int)     { list[a], list[b] = list[b], list[a] }
 func (list IntArray) Less(a, b int) bool { return list[a] < list[b] }
 
 // suck in count data
-func db_data() (map[string]int, map[string]int) {
-    var dbconfig        DbConfig
+func db_data(dbconfig DbConfig) (map[string]int, map[string]int) {
 
-    jsoncfg, err := ioutil.ReadFile("dbconfig.json")
-    if err != nil {
-        panic(err)
-    }
-
-    err = json.Unmarshal(jsoncfg, &dbconfig)
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "DB config unmarshal: ")
-        panic(err)
-    }
-
-    state_counts :=     make(map[string]int)
-    county_counts :=    make(map[string]int)
+    state_counts    := make(map[string]int)
+    county_counts   := make(map[string]int)
 
     dbh, err := sql.Open(dbconfig.Server["dbtype"],
         dbconfig.Server["dbtype"] + "://" + dbconfig.Creds["username"] + ":" +
@@ -314,7 +304,10 @@ func main() {
     var config  Config
     var wg      sync.WaitGroup
 
-    jsoncfg, err := ioutil.ReadFile("config.json")
+    config_file := flag.String("conf", "config.json", "configuration file (JSON-formatted)")
+    flag.Parse()
+
+    jsoncfg, err := ioutil.ReadFile(*config_file)
     if err != nil {
         panic(err)
     }
@@ -346,7 +339,7 @@ func main() {
         panic(err)
     }
 
-    state_data, county_data := db_data()
+    state_data, county_data := db_data(config.DbParam)
 
     for maptype, mapset := range config.Maps {
         var data map[string]int
