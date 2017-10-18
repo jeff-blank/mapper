@@ -5,6 +5,7 @@ import (
     "encoding/json"
     "fmt"
     "image"
+    "image/color"
     "image/draw"
     "image/png"
     "io"
@@ -313,9 +314,20 @@ func main() {
                     img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
                     draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
-                    /*
-                    ** do stuff with the image here: annotations, legend, etc
-                    */
+                    legend_elem_width := 48
+                    legend_elem_height := 16
+                    legend_height := len(config.Colours) * (legend_elem_height + 1) - 1
+                    box_x := b.Dx() - legend_elem_width
+                    box_y := b.Dy() - legend_height
+                    for _, mc := range mincount {
+                        c_red, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][0:2], 16, 64)
+                        c_green, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][2:4], 16, 64)
+                        c_blue, _ := strconv.ParseUint(config.Colours[strconv.Itoa(mc)][4:6], 16, 64)
+                        fill := color.RGBA{uint8(c_red), uint8(c_green), uint8(c_blue), 255}
+                        draw.Draw(img_rgba, image.Rect(box_x, box_y, box_x + legend_elem_width, box_y + legend_elem_height),
+                                    &image.Uniform{fill}, image.ZP, draw.Src)
+                        box_y += legend_elem_height + 1
+                    }
 
                     fontfile := config.DefaultFont
                     if len(attrs["annotation_font_override"]) > 0 {
