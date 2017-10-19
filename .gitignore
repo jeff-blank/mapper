@@ -22,3 +22,4 @@ dbconfig.json
 *.png
 playground/
 mapper
+config.yml
