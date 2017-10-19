@@ -33,6 +33,7 @@ type DbConfig struct {
 
 type Config struct {
     Colours     map[string]string                       `json:"colours"`
+    IMConvert   string                                  `json:"im_convert"`
     LADefaults  map[string]string                       `json:"legend_annotation_defaults"`
     Maps        map[string]map[string]map[string]string `json:"maps"`
     DbParam     DbConfig                                `json:"database"`
@@ -426,10 +427,15 @@ func main() {
                     // going to call ImageMagick's 'convert' because I can't find
                     // a damn SVG package that can write to a non-SVG image and I
                     // don't have the chops to write one.
-                    cmd := exec.Command("convert", "svg:-", "-resize", attrs["outsize"], "png:-")
+                    imagemagick := config.IMConvert
+                    if len(imagemagick) == 0 {
+                        imagemagick = "convert"
+                    }
+                    cmd := exec.Command(imagemagick, "svg:-", "-resize", attrs["outsize"], "png:-")
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
-                        log.Fatal(err)
+                        fmt.Fprintf(os.Stderr, "exec convert: %s\n", err.Error())
+                        return
                     }
                     go func() {
                         defer convert_stdin.Close()
@@ -439,7 +445,8 @@ func main() {
                     // grab PNG data and cram it into an RGBA image
                     png_data, err := cmd.Output()
                     if err != nil {
-                        log.Fatal(err)
+                        fmt.Fprintf(os.Stderr, "read from convert: %s\n", err.Error())
+                        return
                     }
                     png_reader := s.NewReader(string(png_data))
                     img, _, err := image.Decode(png_reader)
