@@ -1,0 +1,78 @@
+general:
+  # default is to check $PATH
+  # imagemagick_convert: "/usr/local/bin/convert"
+
+colours:
+  1: "f0f098"
+  2: "38e0ff"
+  5: "d050c0"
+
+legend_annotation_defaults:
+  # lower-right corner
+  legend_gravity:       "SE"
+  legend_orient:        "vertical"
+  legend_fontfile:      "/usr/local/share/fonts/bitstream-vera/VeraBd.ttf"
+  legend_fontsize:      12
+  legend_cell_width:    52
+  legend_cell_height:   16
+  legend_cell_gap:      1
+  annotation_fontsize:  10
+  # used when '%T%' appears in 'annotation_str'
+  annotation_timefmt:   "2006-01-02  15:04:05 -0700"
+  annotation_fontfile:  "/usr/local/share/fonts/bitstream-vera/Vera.ttf"
+  # annotation_str:       "..."
+  # annotation_x:         350
+  # annotation_y:         370
+
+maps:
+  states:
+    - infile:         "usmap.svg"
+      outfile:        "usmap.png"
+      outsize:        "650x650"
+      annotation_str: "%t% events in %c% states and DC\n%T%"
+      annotation_x:   350
+      annotation_y:   370
+      regions_adjust: -1
+    - infile:         "usmap.svg"
+      outfile:        "usmap-alt.png"
+      outsize:        "650x650"
+      annotation_str: "%t% events in %c% states\n%T%"
+      annotation_x:   350
+      annotation_y:   370
+      # for this map, use this data instead of what's in the db
+      inline_data:
+        AK: 2
+        HI: 9
+        MI: 1
+        NE: 2
+  counties:
+    - infile:         "uscounties.svg"
+      outfile:        "uscounties.png"
+      outsize:        "1440x912"
+      annotation_str: "%t% events in %c% counties and independent cities\n%T%"
+      annotation_x:   1200
+      annotation_y:   890
+    - infile:         "upper-midwest-counties.svg"
+      outfile:        "upper-midwest-counties.png"
+      outsize:        "650x1000"
+      legend_gravity: "NE"
+      annotation_str: "This view: %t% events in %c% counties and independent cities\n%T%"
+      annotation_x:   300
+      annotation_y:   450
+
+database:
+  # server/connection info
+  type:           "postgres"
+  name:           "db_name"
+  host:           "db_server"
+  connect_opts:   "?sslmode=require"
+  # credentials
+  username:       "db_username"
+  password:       "db_passwd"
+  # schema
+  state_column:   "state"
+  county_column:  "county"
+  tally_column:   "count(county)"
+  tables:         "events"
+  where:          "where country = 'US'"
+  group_by:       "group by state, county"
