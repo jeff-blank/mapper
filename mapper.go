@@ -2,7 +2,6 @@ package main
 
 import (
     "database/sql"
-    "encoding/json"
     "flag"
     "fmt"
     "image"
@@ -20,23 +19,46 @@ import (
     s "strings"
     "sync"
     "time"
+
     "jfb/svgxml"
+
     "github.com/golang/freetype"
     _ "github.com/lib/pq"
+
+    "gopkg.in/yaml.v2"
 )
 
-type DbConfig struct {
-    Server      map[string]string       `json:"db_server"`
-    Creds       map[string]string       `json:"db_creds"`
-    Schema      map[string]string       `json:"db_schema"`
+type LegendAnnotateParams struct {
+    LegendGravity       string  `yaml:"legend_gravity"`
+    LegendOrient        string  `yaml:"legend_orient"`
+    LegendFontFile      string  `yaml:"legend_fontfile"`
+    LegendFontSize      float64 `yaml:"legend_fontsize"`
+    LegendCellWidth     int     `yaml:"legend_cell_width"`
+    LegendCellHeight    int     `yaml:"legend_cell_height"`
+    LegendCellGap       int     `yaml:"legend_cell_gap"`
+    AnnotationFontFile  string  `yaml:"annotation_fontfile"`
+    AnnotationFontSize  float64 `yaml:"annotation_fontsize"`
+    AnnotationTimeFmt   string  `yaml:"annotation_timefmt"`
+    AnnotationString    string  `yaml:"annotation_str"`
+    AnnotationX         int     `yaml:"annotation_x"`
+    AnnotationY         int     `yaml:"annotation_y"`
+}
+
+type MapSet struct {
+    InputFile           string                  `yaml:"infile"`
+    OutputFile          string                  `yaml:"outfile"`
+    OutputSize          string                  `yaml:"outsize"`
+    RegionAdjustment    int                     `yaml:"regions_adjustment"`
+    LegendAnnotate      LegendAnnotateParams    `yaml:",inline"`
+    InlineData          map[string]int          `yaml:"inline_data"`
 }
 
 type Config struct {
-    Colours     map[string]string                       `json:"colours"`
-    IMConvert   string                                  `json:"im_convert"`
-    LADefaults  map[string]string                       `json:"legend_annotation_defaults"`
-    Maps        map[string]map[string]map[string]string `json:"maps"`
-    DbParam     DbConfig                                `json:"database"`
+    General     map[string]string
+    Colours     map[string]string
+    LADefaults  LegendAnnotateParams    `yaml:"legend_annotation_defaults"`
+    Maps        map[string][]MapSet     `yaml:"maps"`
+    DbParam     map[string]string       `yaml:"database"`
 }
 
 // set up integer array sorting
@@ -46,30 +68,29 @@ func (list IntArray) Swap(a, b int)     { list[a], list[b] = list[b], list[a] }
 func (list IntArray) Less(a, b int) bool { return list[a] < list[b] }
 
 // suck in count data
-func db_data(dbconfig DbConfig) (map[string]int, map[string]int) {
+func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
 
     state_counts    := make(map[string]int)
     county_counts   := make(map[string]int)
 
-    dbh, err := sql.Open(dbconfig.Server["dbtype"],
-        dbconfig.Server["dbtype"] + "://" + dbconfig.Creds["username"] + ":" +
-        dbconfig.Creds["password"] + "@" + dbconfig.Server["dbhost"] + "/" +
-        dbconfig.Server["dbname"] + dbconfig.Server["dbopts"])
+    dbh, err := sql.Open(dbconfig["type"],
+                    dbconfig["type"] + "://" + dbconfig["username"] + ":" +
+                    dbconfig["password"] + "@" + dbconfig["host"] + "/" +
+                    dbconfig["name"] + dbconfig["connect_opts"])
     if err != nil {
         log.Fatal(err)
     }
 
     query :=
             "select " +
-                dbconfig.Schema["state_column"] + ", " +
-                dbconfig.Schema["county_column"] + ", " +
-                dbconfig.Schema["tally_column"] +
+                dbconfig["state_column"] + ", " +
+                dbconfig["county_column"] + ", " +
+                dbconfig["tally_column"] +
             "from " +
-                dbconfig.Schema["tables"] + " " +
-            dbconfig.Schema["where"] + " " +
-            dbconfig.Schema["group_by"]
+                dbconfig["tables"] + " " +
+                dbconfig["where"] + " " +
+                dbconfig["group_by"]
     rows, err := dbh.Query(query)
-    // fmt.Println(query)
     if err != nil {
         log.Fatal(err)
     }
@@ -112,47 +133,44 @@ func colour_svgdata(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Reg
     return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
-func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data map[string]int) {
+func annotate(img *image.RGBA, defaults LegendAnnotateParams, attrs MapSet, data map[string]int) {
 
-    ann_x_str       := legend_anno_dfl["annotation_x"]
-    ann_y_str       := legend_anno_dfl["annotation_y"]
-    ann_timefmt     := legend_anno_dfl["annotation_timefmt"]
-    ann_fontfile    := legend_anno_dfl["annotation_fontfile"]
-    ann_fontsz_str  := legend_anno_dfl["annotation_sz"]
-    ann_str         := legend_anno_dfl["annotation_str"]
+    ann_x       := defaults.AnnotationX
+    ann_y       := defaults.AnnotationY
+    timefmt     := defaults.AnnotationTimeFmt
+    fontfile    := defaults.AnnotationFontFile
+    fontsize    := defaults.AnnotationFontSize
+    ann_str     := defaults.AnnotationString
 
-    if len(attrs["annotation_x"]) > 0 {
-        ann_x_str = attrs["annotation_x"]
+    if attrs.LegendAnnotate.AnnotationX > 0 {
+        ann_x = attrs.LegendAnnotate.AnnotationX
     }
-    if len(attrs["annotation_y"]) > 0 {
-        ann_y_str = attrs["annotation_y"]
-    }
-    ann_x, err := strconv.Atoi(ann_x_str)
-    ann_y, err := strconv.Atoi(ann_y_str)
-
-    if len(attrs["annotation_fontfile"]) > 0 {
-        ann_fontfile = attrs["annotation_fontfile"]
+    if attrs.LegendAnnotate.AnnotationY > 0 {
+        ann_y = attrs.LegendAnnotate.AnnotationY
     }
 
-    if len(attrs["annotation_fontsize"]) > 0 {
-        ann_fontsz_str = attrs["annotation_sz"]
-    }
-    fontsize, _ := strconv.ParseFloat(ann_fontsz_str, 64)
-
-    if len(attrs["annotation_timefmt"]) > 0 {
-        ann_timefmt = attrs["annotation_timefmt"]
+    if len(attrs.LegendAnnotate.AnnotationFontFile) > 0 {
+        fontfile = attrs.LegendAnnotate.AnnotationFontFile
     }
 
-    if len(attrs["annotation_str"]) > 0 {
-        ann_str = attrs["annotation_str"]
+    if attrs.LegendAnnotate.AnnotationFontSize > 0 {
+        fontsize = attrs.LegendAnnotate.AnnotationFontSize
     }
 
-    ann_fontdata, err := ioutil.ReadFile(ann_fontfile)
+    if len(attrs.LegendAnnotate.AnnotationTimeFmt) > 0 {
+        timefmt = attrs.LegendAnnotate.AnnotationTimeFmt
+    }
+
+    if len(attrs.LegendAnnotate.AnnotationString) > 0 {
+        ann_str = attrs.LegendAnnotate.AnnotationString
+    }
+
+    fontdata, err := ioutil.ReadFile(fontfile)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "can't read from annotation font file '%s': %s\n", ann_fontfile, err.Error())
-        os.Exit(1)
+        fmt.Fprintf(os.Stderr, "annotate()\n")
+        log.Fatal(err)
     }
-    font, err := freetype.ParseFont(ann_fontdata)
+    font, err := freetype.ParseFont(fontdata)
     if err != nil {
         log.Fatal(err)
     }
@@ -171,15 +189,14 @@ func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data ma
         total_hits += hits
     }
     regions := len(data)
-    if len(attrs["regions_adjust"]) > 0 {
-        adj, _ := strconv.Atoi(attrs["regions_adjust"])
-        regions += adj
+    if attrs.RegionAdjustment != 0 {
+        regions += attrs.RegionAdjustment
     }
 
     annotation := s.Replace(ann_str, "%t%", strconv.Itoa(total_hits), -1)
     annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
     if s.Index(annotation, "%T%") >= 0 {
-        annotation = s.Replace(annotation, "%T%", time.Now().Format(ann_timefmt), -1)
+        annotation = s.Replace(annotation, "%T%", time.Now().Format(timefmt), -1)
     }
     ann_lines := s.Split(annotation, "\n")
     for _, line := range ann_lines {
@@ -187,53 +204,49 @@ func annotate(img *image.RGBA, legend_anno_dfl, attrs map[string]string, data ma
         if err != nil {
             log.Fatal(err)
         }
-        pt.Y += ft_ctx.PointToFixed(fontsize * 1.5)
+        pt.Y += ft_ctx.PointToFixed(fontsize * 1.2)
     }
 }
 
-func ah_hates_legends(img *image.RGBA, mincount []int, colours, defaults, attrs map[string]string) {
-    fontfile := defaults["legend_fontfile"]
-    fontsize_str := defaults["legend_fontsize"]
-    gravity := defaults["legend_gravity"]
-    orient := defaults["legend_orient"]
-    cell_w_str := defaults["legend_cell_width"]
-    cell_h_str := defaults["legend_cell_height"]
-    cell_gap_str := defaults["legend_cell_gap"]
+func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string, defaults LegendAnnotateParams, attrs MapSet) {
+    fontfile    := defaults.LegendFontFile
+    fontsize    := defaults.LegendFontSize
+    gravity     := defaults.LegendGravity
+    orient      := defaults.LegendOrient
+    cell_w      := defaults.LegendCellWidth
+    cell_h      := defaults.LegendCellHeight
+    cell_gap    := defaults.LegendCellGap
 
-    if len(attrs["legend_fontfile"]) > 0 {
-        fontfile = attrs["legend_fontfile"]
-    }
-
-    if len(attrs["legend_fontsize"]) > 0 {
-        fontsize_str = attrs["legend_fontsize"]
-    }
-    fontsize, _ := strconv.ParseFloat(fontsize_str, 64)
-
-    if len(attrs["legend_gravity"]) > 0 {
-        gravity = attrs["legend_gravity"]
+    if len(attrs.LegendAnnotate.LegendFontFile) > 0 {
+        fontfile = attrs.LegendAnnotate.LegendFontFile
     }
 
-    if len(attrs["legend_orient"]) > 0 {
-        orient = attrs["legend_orient"]
+    if attrs.LegendAnnotate.LegendFontSize > 0 {
+        fontsize = attrs.LegendAnnotate.LegendFontSize
     }
 
-    if len(attrs["legend_cell_width"]) > 0 {
-        cell_w_str = attrs["legend_cell_width"]
+    if len(attrs.LegendAnnotate.LegendGravity) > 0 {
+        gravity = attrs.LegendAnnotate.LegendGravity
     }
-    cell_w, _ := strconv.Atoi(cell_w_str)
-    if len(attrs["legend_cell_height"]) > 0 {
-        cell_h_str = attrs["legend_cell_height"]
+
+    if len(attrs.LegendAnnotate.LegendOrient) > 0 {
+        orient = attrs.LegendAnnotate.LegendOrient
     }
-    cell_h, _ := strconv.Atoi(cell_h_str)
-    if len(attrs["legend_cell_gap"]) > 0 {
-        cell_gap_str = attrs["legend_cell_gap"]
+
+    if attrs.LegendAnnotate.LegendCellWidth > 0 {
+        cell_w = attrs.LegendAnnotate.LegendCellWidth
     }
-    cell_gap, _ := strconv.Atoi(cell_gap_str)
+    if attrs.LegendAnnotate.LegendCellHeight > 0 {
+        cell_h = attrs.LegendAnnotate.LegendCellHeight
+    }
+    if attrs.LegendAnnotate.LegendCellGap > 0 {
+        cell_gap = attrs.LegendAnnotate.LegendCellGap
+    }
 
     fontdata, err := ioutil.ReadFile(fontfile)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "can't read from legend font file '%s': %s\n", fontfile, err.Error())
-        os.Exit(1)
+        fmt.Fprintf(os.Stderr, "ah_hates_legends()\n")
+        log.Fatal(err)
     }
     font, err := freetype.ParseFont(fontdata)
     if err != nil {
@@ -305,18 +318,17 @@ func main() {
     var config  Config
     var wg      sync.WaitGroup
 
-    config_file := flag.String("conf", "config.json", "configuration file (JSON-formatted)")
+    config_file := flag.String("conf", "mapper.yml", "configuration file")
     flag.Parse()
 
-    jsoncfg, err := ioutil.ReadFile(*config_file)
+    yamlcfg, err := ioutil.ReadFile(*config_file)
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
-    err = json.Unmarshal(jsoncfg, &config)
+    err = yaml.Unmarshal(yamlcfg, &config)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Config unmarshal: ")
-        panic(err)
+        log.Fatal(err)
     }
 
     // make sorted list of keys (minimum counts) for later comparisons
@@ -332,12 +344,12 @@ func main() {
 
     re_fill, err := re.Compile(`(fill:#)......`)
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
     re_svgext, err := re.Compile(`\.svg$`)
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
     state_data, county_data := db_data(config.DbParam)
@@ -351,29 +363,30 @@ func main() {
             data = county_data
         }
 
-        for infile, attrs := range mapset {
+        for _, attrs := range mapset {
             wg.Add(1)
-            // go func(srcfile, dstfile, outsize, maptype string, mapdata map[string]int)
-            go func(srcfile string, attrs map[string]string, maptype string, mapdata map[string]int) {
+            go func(attrs MapSet, maptype string, mapdata map[string]int) {
 
                 var county_data_new map[string]int
 
                 defer wg.Done()
                 defer os.Stderr.Close()
 
-                mapsvg, err := ioutil.ReadFile(srcfile)
+                mapsvg, err := ioutil.ReadFile(attrs.InputFile)
                 if err != nil {
-                    fmt.Fprintf(os.Stderr, "can't read '" + srcfile + "': " + err.Error())
+                    fmt.Fprintf(os.Stderr, "can't read '" + attrs.InputFile+ "': " + err.Error())
                     return
                 }
 
                 mapsvg_obj := svgxml.XML2SVG(mapsvg)
                 if mapsvg_obj == nil {
-                    fmt.Fprintf(os.Stderr, "can't create SVG object from " + srcfile)
+                    fmt.Fprintf(os.Stderr, "can't create SVG object from " + attrs.InputFile)
                     return
                 }
 
-                if maptype == "counties" {
+                if len(attrs.InlineData) > 0 {
+                    mapdata = attrs.InlineData
+                } else if maptype == "counties" {
                     // This block has the effect of pruning county data for
                     // *states* that don't appear in the given map. This is so
                     // that counties in states outside the map don't cause
@@ -418,20 +431,20 @@ func main() {
                 svg_coloured, errlist := colour_svgdata(mapsvg_obj, mapdata, re_fill, config.Colours, mincount)
                 if len(errlist) > 0 {
                     for _, errmsg := range errlist {
-                        fmt.Fprintf(os.Stderr, "%s: %s\n", srcfile, errmsg)
+                        fmt.Fprintf(os.Stderr, "%s: %s\n", attrs.InputFile, errmsg)
                     }
                 }
 
-                ret := re_svgext.Find([]byte(attrs["outfile"]))
+                ret := re_svgext.Find([]byte(attrs.OutputFile))
                 if ret == nil {
                     // going to call ImageMagick's 'convert' because I can't find
                     // a damn SVG package that can write to a non-SVG image and I
                     // don't have the chops to write one.
-                    imagemagick := config.IMConvert
+                    imagemagick := config.General["imagemagick_convert"]
                     if len(imagemagick) == 0 {
                         imagemagick = "convert"
                     }
-                    cmd := exec.Command(imagemagick, "svg:-", "-resize", attrs["outsize"], "png:-")
+                    cmd := exec.Command(imagemagick, "svg:-", "-resize", attrs.OutputSize, "png:-")
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
                         fmt.Fprintf(os.Stderr, "exec convert: %s\n", err.Error())
@@ -457,9 +470,9 @@ func main() {
                     ah_hates_legends(img_rgba, mincount, config.Colours, config.LADefaults, attrs)
 
                     annotate(img_rgba, config.LADefaults, attrs, mapdata)
-                    outfile_handle, err := os.Create(attrs["outfile"])
+                    outfile_handle, err := os.Create(attrs.OutputFile)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't create '" + attrs["outfile"] + "': " + err.Error())
+                        fmt.Fprintf(os.Stderr, "can't create '" + attrs.OutputFile + "': " + err.Error())
                         return
                     }
                     if err := png.Encode(outfile_handle, img_rgba); err != nil {
@@ -468,14 +481,14 @@ func main() {
                     }
                 } else {
                     // just going back to an SVG file
-                    err := ioutil.WriteFile(attrs["outfile"], []byte(svg_coloured), 0666)
+                    err := ioutil.WriteFile(attrs.OutputFile, []byte(svg_coloured), 0666)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't write to '" + attrs["outfile"] + "': " + err.Error())
+                        fmt.Fprintf(os.Stderr, "can't write to '" + attrs.OutputFile + "': " + err.Error())
                         return
                     }
                 }
 
-            }(infile, attrs, maptype, data)
+            }(attrs, maptype, data)
         }
     }
 
