@@ -386,7 +386,8 @@ func main() {
 
                 if len(attrs.InlineData) > 0 {
                     mapdata = attrs.InlineData
-                } else if maptype == "counties" {
+                }
+                if maptype == "counties" {
                     // This block has the effect of pruning county data for
                     // *states* that don't appear in the given map. This is so
                     // that counties in states outside the map don't cause
