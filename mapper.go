@@ -48,7 +48,7 @@ type MapSet struct {
     InputFile           string                  `yaml:"infile"`
     OutputFile          string                  `yaml:"outfile"`
     OutputSize          string                  `yaml:"outsize"`
-    RegionAdjustment    int                     `yaml:"regions_adjustment"`
+    RegionAdjustment    int                     `yaml:"regions_adjust"`
     LegendAnnotate      LegendAnnotateParams    `yaml:",inline"`
     InlineData          map[string]int          `yaml:"inline_data"`
 }
