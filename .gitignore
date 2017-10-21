@@ -16,8 +16,6 @@
 # vim
 *.swp
 
-config.json
-dbconfig.json
 *.svg
 *.png
 playground/
