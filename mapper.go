@@ -466,7 +466,9 @@ func main() {
                     img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
                     draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
-                    ah_hates_legends(img_rgba, mincount, config.Colours, config.LADefaults, attrs)
+                    if len(attrs.LegendAnnotate.LegendFontFile) > 0 {
+                        ah_hates_legends(img_rgba, mincount, config.Colours, config.LADefaults, attrs)
+                    }
 
                     annotate(img_rgba, config.LADefaults, attrs, mapdata)
                     outfile_handle, err := os.Create(attrs.OutputFile)
