@@ -85,7 +85,7 @@ func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
             "select " +
                 dbconfig["state_column"] + ", " +
                 dbconfig["county_column"] + ", " +
-                dbconfig["tally_column"] +
+                dbconfig["tally_column"] + " " +
             "from " +
                 dbconfig["tables"] + " " +
                 dbconfig["where"] + " " +
