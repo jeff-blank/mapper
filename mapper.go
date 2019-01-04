@@ -321,7 +321,7 @@ func main() {
 
     yamlcfg, err := ioutil.ReadFile(*config_file)
     if err != nil {
-        log.Fatalf("read config file '%s': %v", config_file, err)
+        log.Fatalf("read config file '%s': %v", *config_file, err)
     }
 
     err = yaml.Unmarshal(yamlcfg, &config)
