@@ -10,7 +10,6 @@ import (
     "image/png"
     "io"
     "io/ioutil"
-    "log"
     "os"
     "os/exec"
     re "regexp"
@@ -22,6 +21,7 @@ import (
 
     "jfb/svgxml"
 
+    log "github.com/sirupsen/logrus"
     "github.com/golang/freetype"
     _ "github.com/lib/pq"
 
@@ -78,7 +78,7 @@ func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
                     dbconfig["password"] + "@" + dbconfig["host"] + "/" +
                     dbconfig["name"] + dbconfig["connect_opts"])
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("sql.Open(): ", err)
     }
 
     query :=
@@ -92,7 +92,7 @@ func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
                 dbconfig["group_by"]
     rows, err := dbh.Query(query)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("dbh.Query(): ", err)
     }
 
     defer rows.Close()
@@ -100,14 +100,14 @@ func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
         var state, county string
         var count int
         if err := rows.Scan(&state, &county, &count); err != nil {
-            log.Fatal(err)
+            log.Fatal("rows.Scan(): ", err)
         }
         state_counts[state] += count
         state_county_key := s.Replace(state + " " + county, " ", "_", -1)
         county_counts[state_county_key] = count
     }
     if err := rows.Err(); err != nil {
-        log.Fatal(err)
+        log.Fatal("rows.Err(): ", err)
     }
 
     return state_counts, county_counts
@@ -167,12 +167,11 @@ func annotate(img *image.RGBA, defaults LegendAnnotateParams, attrs MapSet, data
 
     fontdata, err := ioutil.ReadFile(fontfile)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "annotate()\n")
-        log.Fatal(err)
+        log.Fatalf("annotate(): read font file '%s': %v", fontfile, err)
     }
     font, err := freetype.ParseFont(fontdata)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("annotate(): ParseFont(): ", err)
     }
 
     ft_ctx := freetype.NewContext()
@@ -202,7 +201,7 @@ func annotate(img *image.RGBA, defaults LegendAnnotateParams, attrs MapSet, data
     for _, line := range ann_lines {
         _, err = ft_ctx.DrawString(line, pt)
         if err != nil {
-            log.Fatal(err)
+            log.Fatal("annotate(): ft_ctx.DrawString(): ", err)
         }
         pt.Y += ft_ctx.PointToFixed(fontsize * 1.2)
     }
@@ -245,12 +244,11 @@ func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string
 
     fontdata, err := ioutil.ReadFile(fontfile)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "ah_hates_legends()\n")
-        log.Fatal(err)
+        log.Fatalf("ah_hates_legends(): read font file '%s': %v", fontfile, err)
     }
     font, err := freetype.ParseFont(fontdata)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("ah_hates_legends(): ParseFont(): ", err)
     }
     b := img.Bounds()
     ft_ctx := freetype.NewContext()
@@ -308,7 +306,7 @@ func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string
         fpt := freetype.Pt(text_x, text_y)
         _, err = ft_ctx.DrawString(label, fpt)
         if err != nil {
-            log.Fatal(err)
+            log.Fatal("ah_hates_legends(): ft_ctx.DrawString(): ", err)
         }
     }
 }
@@ -323,12 +321,12 @@ func main() {
 
     yamlcfg, err := ioutil.ReadFile(*config_file)
     if err != nil {
-        log.Fatal(err)
+        log.Fatalf("read config file '%s': %v", config_file, err)
     }
 
     err = yaml.Unmarshal(yamlcfg, &config)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("yaml.Unmarshal(): ", err)
     }
 
     // make sorted list of keys (minimum counts) for later comparisons
@@ -344,12 +342,12 @@ func main() {
 
     re_fill, err := re.Compile(`(fill:#)......`)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("re.Compile() fill: ", err)
     }
 
     re_svgext, err := re.Compile(`\.svg$`)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("re.Compile() .svg: ", err)
     }
 
     state_data, county_data := db_data(config.DbParam)
@@ -448,7 +446,7 @@ func main() {
                     cmd := exec.Command(imagemagick, "svg:-", "-resize", attrs.OutputSize, "png:-")
                     convert_stdin, err := cmd.StdinPipe()
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "exec convert: %s\n", err.Error())
+                        log.Error("exec convert: ", err)
                         return
                     }
                     go func() {
@@ -459,7 +457,7 @@ func main() {
                     // grab PNG data and cram it into an RGBA image
                     png_data, err := cmd.Output()
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "read from convert: %s\n", err.Error())
+                        log.Error("read from convert: ", err)
                         return
                     }
                     png_reader := s.NewReader(string(png_data))
@@ -473,18 +471,18 @@ func main() {
                     annotate(img_rgba, config.LADefaults, attrs, mapdata)
                     outfile_handle, err := os.Create(attrs.OutputFile)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't create '" + attrs.OutputFile + "': " + err.Error())
+                        log.Errorf("can't create '%s': %v", attrs.OutputFile, err)
                         return
                     }
                     if err := png.Encode(outfile_handle, img_rgba); err != nil {
                         outfile_handle.Close()
-                        log.Fatal(err)
+                        log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
                     }
                 } else {
                     // just going back to an SVG file
                     err := ioutil.WriteFile(attrs.OutputFile, []byte(svg_coloured), 0666)
                     if err != nil {
-                        fmt.Fprintf(os.Stderr, "can't write to '" + attrs.OutputFile + "': " + err.Error())
+                        log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
                         return
                     }
                 }
