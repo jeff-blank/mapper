@@ -51,6 +51,7 @@ type MapSet struct {
     RegionAdjustment    int                     `yaml:"regions_adjust"`
     LegendAnnotate      LegendAnnotateParams    `yaml:",inline"`
     InlineData          map[string]int          `yaml:"inline_data"`
+    DbWhere             string                  `yaml:"db_where"`
 }
 
 type Config struct {
@@ -364,6 +365,18 @@ func main() {
         for _, attrs := range mapset {
             wg.Add(1)
             go func(attrs MapSet, maptype string, mapdata map[string]int) {
+
+                if len(config.DbParam["where"]) > 0 && len(attrs.DbWhere) > 0 {
+                    newDbConfig := config.DbParam
+                    newDbConfig["where"] = config.DbParam["where"] + " and " + attrs.DbWhere
+                    state_new, county_new := db_data(newDbConfig)
+                    if maptype == "states" {
+                        mapdata = state_new
+                    } else {
+                        mapdata = county_new
+                    }
+                    log.Debug(mapdata)
+                }
 
                 var county_data_new map[string]int
 
