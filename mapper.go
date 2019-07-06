@@ -91,6 +91,7 @@ func db_data(dbconfig map[string]string) (map[string]int, map[string]int) {
                 dbconfig["tables"] + " " +
                 dbconfig["where"] + " " +
                 dbconfig["group_by"]
+    log.Debug(query)
     rows, err := dbh.Query(query)
     if err != nil {
         log.Fatal("dbh.Query(): ", err)
@@ -318,7 +319,14 @@ func main() {
     var wg      sync.WaitGroup
 
     config_file := flag.String("conf", "mapper.yml", "configuration file")
+    logDebug := flag.Bool("d", false, "debug-level logging")
     flag.Parse()
+
+    if *logDebug {
+        log.SetLevel(log.DebugLevel)
+    } else {
+        log.SetLevel(log.InfoLevel)
+    }
 
     yamlcfg, err := ioutil.ReadFile(*config_file)
     if err != nil {
