@@ -373,10 +373,16 @@ func main() {
 
 		for _, attrs := range mapset {
 			wg.Add(1)
-			go func(attrs MapSet, maptype string, mapdata map[string]int) {
+			go func(attrs MapSet, maptype string, mapdata_default map[string]int) {
+
+				var mapdata map[string]int
 
 				if len(config.DbParam["where"]) > 0 && len(attrs.DbWhere) > 0 {
-					newDbConfig := config.DbParam
+					newDbConfig := make(map[string]string)
+					for k, v := range config.DbParam {
+						log.Debugf("newDbConfig[%s] = %s", k, v)
+						newDbConfig[k] = v
+					}
 					newDbConfig["where"] = config.DbParam["where"] + " and " + attrs.DbWhere
 					state_new, county_new := db_data(newDbConfig)
 					if maptype == "states" {
@@ -385,6 +391,8 @@ func main() {
 						mapdata = county_new
 					}
 					log.Debug(mapdata)
+				} else {
+					mapdata = mapdata_default
 				}
 
 				var county_data_new map[string]int
@@ -452,7 +460,7 @@ func main() {
 				svg_coloured, errlist := colour_svgdata(mapsvg_obj, mapdata, re_fill, config.Colours, mincount)
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
-						fmt.Fprintf(os.Stderr, "%s: %s\n", attrs.InputFile, errmsg)
+						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
 					}
 				}
 
