@@ -19,12 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"jfb/svgxml"
-
 	"github.com/golang/freetype"
+	"github.com/jeff-blank/mapper/pkg/svgxml"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-
 	"gopkg.in/yaml.v2"
 )
 

@@ -6,8 +6,6 @@ After cloning the repo:
 
 ```bash
 $ go get github.com/golang/freetype gopkg.in/yaml.v2 github.com/lib/pq
-$ mkdir -p $GOPATH/src/jfb/svgxml
-$ mv svgxml.go $GOPATH/src/jfb/svgxml
 ```
 Replace `github.com/lib/pq` with the package for your preferred database driver
 and update the `_ "github.com/lib/pq"` import line in `mapper.go`. Then
