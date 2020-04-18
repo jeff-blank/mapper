@@ -20,45 +20,11 @@ import (
 	"time"
 
 	"github.com/golang/freetype"
+	"github.com/jeff-blank/mapper/pkg/config"
 	"github.com/jeff-blank/mapper/pkg/svgxml"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 )
-
-type LegendAnnotateParams struct {
-	LegendGravity      string  `yaml:"legend_gravity"`
-	LegendOrient       string  `yaml:"legend_orient"`
-	LegendFontFile     string  `yaml:"legend_fontfile"`
-	LegendFontSize     float64 `yaml:"legend_fontsize"`
-	LegendCellWidth    int     `yaml:"legend_cell_width"`
-	LegendCellHeight   int     `yaml:"legend_cell_height"`
-	LegendCellGap      int     `yaml:"legend_cell_gap"`
-	AnnotationFontFile string  `yaml:"annotation_fontfile"`
-	AnnotationFontSize float64 `yaml:"annotation_fontsize"`
-	AnnotationTimeFmt  string  `yaml:"annotation_timefmt"`
-	AnnotationString   string  `yaml:"annotation_str"`
-	AnnotationX        int     `yaml:"annotation_x"`
-	AnnotationY        int     `yaml:"annotation_y"`
-}
-
-type MapSet struct {
-	InputFile        string               `yaml:"infile"`
-	OutputFile       string               `yaml:"outfile"`
-	OutputSize       string               `yaml:"outsize"`
-	RegionAdjustment int                  `yaml:"regions_adjust"`
-	LegendAnnotate   LegendAnnotateParams `yaml:",inline"`
-	InlineData       map[string]int       `yaml:"inline_data"`
-	DbWhere          string               `yaml:"db_where"`
-}
-
-type Config struct {
-	General    map[string]string
-	Colours    map[string]string
-	LADefaults LegendAnnotateParams `yaml:"legend_annotation_defaults"`
-	Maps       map[string][]MapSet  `yaml:"maps"`
-	DbParam    map[string]string    `yaml:"database"`
-}
 
 // set up integer array sorting
 type IntArray []int
@@ -134,7 +100,7 @@ func colour_svgdata(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Reg
 	return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
-func annotate(img *image.RGBA, defaults LegendAnnotateParams, attrs MapSet, data map[string]int) {
+func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
 
 	ann_x := defaults.AnnotationX
 	ann_y := defaults.AnnotationY
@@ -208,7 +174,7 @@ func annotate(img *image.RGBA, defaults LegendAnnotateParams, attrs MapSet, data
 	}
 }
 
-func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string, defaults LegendAnnotateParams, attrs MapSet) {
+func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
 	fontfile := defaults.LegendFontFile
 	fontsize := defaults.LegendFontSize
 	gravity := defaults.LegendGravity
@@ -314,10 +280,9 @@ func ah_hates_legends(img *image.RGBA, mincount []int, colours map[string]string
 
 func main() {
 
-	var config Config
 	var wg sync.WaitGroup
 
-	config_file := flag.String("conf", "mapper.yml", "configuration file")
+	configFile := flag.String("conf", "mapper.yml", "configuration file")
 	logDebug := flag.Bool("d", false, "debug-level logging")
 	flag.Parse()
 
@@ -327,20 +292,12 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	yamlcfg, err := ioutil.ReadFile(*config_file)
-	if err != nil {
-		log.Fatalf("read config file '%s': %v", *config_file, err)
-	}
-
-	err = yaml.Unmarshal(yamlcfg, &config)
-	if err != nil {
-		log.Fatal("yaml.Unmarshal(): ", err)
-	}
+	cfg := config.New(*configFile)
 
 	// make sorted list of keys (minimum counts) for later comparisons
-	mincount := make([]int, len(config.Colours))
+	mincount := make([]int, len(cfg.Colours))
 	i := 0
-	for k, _ := range config.Colours {
+	for k, _ := range cfg.Colours {
 		k_i, _ := strconv.ParseInt(k, 0, 64)
 		mincount[i] = int(k_i)
 		i++
@@ -358,9 +315,9 @@ func main() {
 		log.Fatal("re.Compile() .svg: ", err)
 	}
 
-	state_data, county_data := db_data(config.DbParam)
+	state_data, county_data := db_data(cfg.DbParam)
 
-	for maptype, mapset := range config.Maps {
+	for maptype, mapset := range cfg.Maps {
 		var data map[string]int
 
 		if maptype == "states" {
@@ -371,17 +328,17 @@ func main() {
 
 		for _, attrs := range mapset {
 			wg.Add(1)
-			go func(attrs MapSet, maptype string, mapdata_default map[string]int) {
+			go func(attrs config.MapSet, maptype string, mapdata_default map[string]int) {
 
 				var mapdata map[string]int
 
-				if len(config.DbParam["where"]) > 0 && len(attrs.DbWhere) > 0 {
+				if len(cfg.DbParam["where"]) > 0 && len(attrs.DbWhere) > 0 {
 					newDbConfig := make(map[string]string)
-					for k, v := range config.DbParam {
+					for k, v := range cfg.DbParam {
 						log.Debugf("newDbConfig[%s] = %s", k, v)
 						newDbConfig[k] = v
 					}
-					newDbConfig["where"] = config.DbParam["where"] + " and " + attrs.DbWhere
+					newDbConfig["where"] = cfg.DbParam["where"] + " and " + attrs.DbWhere
 					state_new, county_new := db_data(newDbConfig)
 					if maptype == "states" {
 						mapdata = state_new
@@ -455,7 +412,7 @@ func main() {
 					mapdata = county_data_new
 				}
 
-				svg_coloured, errlist := colour_svgdata(mapsvg_obj, mapdata, re_fill, config.Colours, mincount)
+				svg_coloured, errlist := colour_svgdata(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
 						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
@@ -467,7 +424,7 @@ func main() {
 					// going to call ImageMagick's 'convert' because I can't find
 					// a damn SVG package that can write to a non-SVG image and I
 					// don't have the chops to write one.
-					imagemagick := config.General["imagemagick_convert"]
+					imagemagick := cfg.General["imagemagick_convert"]
 					if len(imagemagick) == 0 {
 						imagemagick = "convert"
 					}
@@ -494,11 +451,11 @@ func main() {
 					img_rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 					draw.Draw(img_rgba, img_rgba.Bounds(), img, b.Min, draw.Src)
 
-					if len(config.LADefaults.LegendFontFile) > 0 || len(attrs.LegendAnnotate.LegendFontFile) > 0 {
-						ah_hates_legends(img_rgba, mincount, config.Colours, config.LADefaults, attrs)
+					if len(cfg.LADefaults.LegendFontFile) > 0 || len(attrs.LegendAnnotate.LegendFontFile) > 0 {
+						ah_hates_legends(img_rgba, mincount, cfg.Colours, cfg.LADefaults, attrs)
 					}
 
-					annotate(img_rgba, config.LADefaults, attrs, mapdata)
+					annotate(img_rgba, cfg.LADefaults, attrs, mapdata)
 					outfile_handle, err := os.Create(attrs.OutputFile)
 					if err != nil {
 						log.Errorf("can't create '%s': %v", attrs.OutputFile, err)
@@ -524,6 +481,3 @@ func main() {
 	wg.Wait()
 
 }
-
-// vim:ts=4:et:
-// ex:ai:sw=4:ts=1000:
