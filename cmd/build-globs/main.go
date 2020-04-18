@@ -3,53 +3,26 @@ package main
 import (
 	"database/sql"
 	"flag"
-	"io/ioutil"
 	s "strings"
 
+	"github.com/jeff-blank/mapper/pkg/config"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 )
 
-type LegendAnnotateParams struct {
-	LegendGravity      string  `yaml:"legend_gravity"`
-	LegendOrient       string  `yaml:"legend_orient"`
-	LegendFontFile     string  `yaml:"legend_fontfile"`
-	LegendFontSize     float64 `yaml:"legend_fontsize"`
-	LegendCellWidth    int     `yaml:"legend_cell_width"`
-	LegendCellHeight   int     `yaml:"legend_cell_height"`
-	LegendCellGap      int     `yaml:"legend_cell_gap"`
-	AnnotationFontFile string  `yaml:"annotation_fontfile"`
-	AnnotationFontSize float64 `yaml:"annotation_fontsize"`
-	AnnotationTimeFmt  string  `yaml:"annotation_timefmt"`
-	AnnotationString   string  `yaml:"annotation_str"`
-	AnnotationX        int     `yaml:"annotation_x"`
-	AnnotationY        int     `yaml:"annotation_y"`
-}
-
-type MapSet struct {
-	InputFile        string               `yaml:"infile"`
-	OutputFile       string               `yaml:"outfile"`
-	OutputSize       string               `yaml:"outsize"`
-	RegionAdjustment int                  `yaml:"regions_adjust"`
-	LegendAnnotate   LegendAnnotateParams `yaml:",inline"`
-	InlineData       map[string]int       `yaml:"inline_data"`
-	DbWhere          string               `yaml:"db_where"`
-}
-
-type Config struct {
-	General       map[string]string
-	Colours       map[string]string
-	LADefaults    LegendAnnotateParams `yaml:"legend_annotation_defaults"`
-	Maps          map[string][]MapSet  `yaml:"maps"`
-	DbParam       map[string]string    `yaml:"database"`
-	SmallGlobSize map[string]int
-	SmallGlobId   map[string]int
-	LargeGlobSize map[string]int
-	LargeGlobId   map[string]int
-	NoGlobId      map[string]int
-	NoGlobIdDb    int
-}
+const (
+	ADJACENCY_SQL = `
+		select
+			cm.id
+		from
+			counties_master cm_in,
+			counties_master cm,
+			counties_graph cg
+		where
+			cm_in.id = $1 and
+			((cg.a=cm_in.id and cg.b=cm.id)
+			 or (cg.b=cm_in.id and cg.a=cm.id))`
+)
 
 type Residence map[string]int
 type CountyList map[int]int
@@ -168,7 +141,7 @@ func findGlob(query *sql.Stmt, cid int, counties map[int]int, glob Glob) {
 	}
 }
 
-func dbAddGlobs(dbh *sql.DB, karta Karta, residence, dbAction string, config Config) {
+func dbAddGlobs(dbh *sql.DB, karta Karta, residence, dbAction string, cfg *config.Config) {
 	var (
 		err      error
 		globStmt *sql.Stmt
@@ -191,8 +164,8 @@ func dbAddGlobs(dbh *sql.DB, karta Karta, residence, dbAction string, config Con
 		}
 	}
 	for gid, g := range karta {
-		if gid >= config.NoGlobId["min"] && gid <= config.NoGlobId["max"] {
-			gid = config.NoGlobIdDb
+		if gid >= cfg.NoGlobId["min"] && gid <= cfg.NoGlobId["max"] {
+			gid = cfg.NoGlobIdDb
 		}
 		for cid, _ := range g {
 			res, err := globStmt.Exec(cid, gid)
@@ -204,7 +177,6 @@ func dbAddGlobs(dbh *sql.DB, karta Karta, residence, dbAction string, config Con
 				log.Fatalf("dbAddGlobs(): %s county %d with glob id %d: can't get # rows affected: %v", dbAction, cid, gid, err)
 			}
 			if ra != 1 {
-				//_ = dbh.QueryRow(`select * from county_globs where county_id = `+ strconv.Itoa(cid)).Scan(&county, &state)
 				log.Fatalf("dbAddGlobs(): %s county %d with glob id %d (%s): %d rows affected", dbAction, cid, gid, residence, ra)
 			}
 		}
@@ -212,9 +184,7 @@ func dbAddGlobs(dbh *sql.DB, karta Karta, residence, dbAction string, config Con
 }
 
 func main() {
-	var config Config
-
-	config_file := flag.String("conf", "mapper.yml", "configuration file")
+	configFile := flag.String("conf", "mapper.yml", "configuration file")
 	logDebug := flag.Bool("d", false, "debug-level logging")
 	flag.Parse()
 
@@ -224,48 +194,18 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	yamlcfg, err := ioutil.ReadFile(*config_file)
-	if err != nil {
-		log.Fatalf("read config file '%s': %v", *config_file, err)
-	}
+	cfg := config.New(*configFile)
 
-	err = yaml.Unmarshal(yamlcfg, &config)
-	if err != nil {
-		log.Fatal("yaml.Unmarshal(): ", err)
-	}
+	log.Debugf("%#v", cfg)
 
-	// TODO: add to config file
-	config.NoGlobIdDb = 9999
-	config.NoGlobId = map[string]int{"min": 9000, "max": 9999}
-	config.SmallGlobSize = map[string]int{"min": 2, "max": 9}
-	config.SmallGlobId = map[string]int{"min": 100, "max": 4999}
-	config.LargeGlobSize = map[string]int{"min": 10, "max": 5000}
-	config.LargeGlobId = map[string]int{"min": 2, "max": 9}
-
-	dbh := dbConnect(config.DbParam)
+	dbh := dbConnect(cfg.DbParam)
 	defer dbh.Close()
 
 	klumpKartaSamling := make(map[string]Karta, 0)
-	adjacencyQuery, err := dbh.Prepare(`select
-	cm.id
-from
-	counties_master cm_in,
-	counties_master cm,
-	counties_graph cg
-where
-	cm_in.id = $1 and
-	((cg.a=cm_in.id and cg.b=cm.id)
-	 or (cg.b=cm_in.id and cg.a=cm.id))`)
+	adjacencyQuery, err := dbh.Prepare(ADJACENCY_SQL)
 	if err != nil {
 		log.Fatalf("prepare adjacencyQuery: %v", err)
 	}
-
-	/*
-		countyNameQuery, err := dbh.Prepare(`select county, state from counties_master where id=$1`)
-		if err != nil {
-			log.Fatalf("prepare countyNameQuery: %v", err)
-		}
-	*/
 
 	residenceList := getResidences(dbh)
 	for residence, home := range residenceList {
@@ -300,12 +240,12 @@ where
 				}
 			}
 			if globId != 1 {
-				if len(glob) >= config.SmallGlobSize["min"] && len(glob) <= config.SmallGlobSize["max"] {
-					globId = findFreeGlobId(config.SmallGlobId["min"], config.SmallGlobId["max"], globIds)
-				} else if len(glob) >= config.LargeGlobSize["min"] && len(glob) <= config.LargeGlobSize["max"] {
-					globId = findFreeGlobId(config.LargeGlobId["min"], config.LargeGlobId["max"], globIds)
+				if len(glob) >= cfg.SmallGlobSize["min"] && len(glob) <= cfg.SmallGlobSize["max"] {
+					globId = findFreeGlobId(cfg.SmallGlobId["min"], cfg.SmallGlobId["max"], globIds)
+				} else if len(glob) >= cfg.LargeGlobSize["min"] && len(glob) <= cfg.LargeGlobSize["max"] {
+					globId = findFreeGlobId(cfg.LargeGlobId["min"], cfg.LargeGlobId["max"], globIds)
 				} else if len(glob) == 1 {
-					globId = findFreeGlobId(config.NoGlobId["min"], config.NoGlobId["max"], globIds)
+					globId = findFreeGlobId(cfg.NoGlobId["min"], cfg.NoGlobId["max"], globIds)
 				}
 				log.Debug("globId=", globId)
 				globIds[globId] = 1
@@ -315,32 +255,14 @@ where
 		}
 		log.Debugf("end: %d counties", len(countyList))
 		klumpKartaSamling[s.ToLower(residence)] = klumpKarta
-		/*
-			for gid, g := range klumpKarta {
-				//if len(g) < 2 { continue }
-				if gid >= config.NoGlobId["min"] && gid <= config.NoGlobId["max"] {
-					gid = config.NoGlobIdDb
-				}
-				fmt.Printf("%d(%d) => {\n", gid, len(g))
-				for cid, _ := range g {
-					var county, state string
-					_ = countyNameQuery.QueryRow(cid).Scan(&county, &state)
-					fmt.Printf("\t%s, %s\n", county, state)
-				}
-				fmt.Println("}")
-			}
-		*/
 	}
 
-	dbAddGlobs(dbh, klumpKartaSamling["_all"], "_all", "insert", config)
+	dbAddGlobs(dbh, klumpKartaSamling["_all"], "_all", "insert", cfg)
 	for residence, karta := range klumpKartaSamling {
 		if residence == "_all" {
 			continue
 		}
-		dbAddGlobs(dbh, karta, residence, "update", config)
+		dbAddGlobs(dbh, karta, residence, "update", cfg)
 	}
 
 }
-
-// vim:ts=4:et:
-// ex:ai:sw=4:ts=1000:
