@@ -101,8 +101,6 @@ func main() {
 					mapdata = mapdata_default
 				}
 
-				var county_data_new map[string]int
-
 				defer wg.Done()
 				defer os.Stderr.Close()
 
@@ -122,45 +120,7 @@ func main() {
 					mapdata = attrs.InlineData
 				}
 				if maptype == "counties" {
-					// This block has the effect of pruning county data for
-					// *states* that don't appear in the given map. This is so
-					// that counties in states outside the map don't cause
-					// error messages and counties in the map that have a
-					// different (incorrect)( name in the data do generate
-					// errors.
-
-					var map_state_list []string
-
-					county_data_new = make(map[string]int)
-
-					// first, make a list of all states in the map using
-					// state_data as the source of state names
-					for _, g := range mapsvg_obj.G {
-						for state, _ := range state_data {
-							if s.Index(g.Id, state+"_") == 0 {
-								map_state_list = append(map_state_list, state+"_")
-							}
-						}
-					}
-
-					// next, search county names in data for states found in
-					// the map and copy only county data entries for those
-					// found states
-					for state_county, sc_count := range mapdata {
-						found_state := false
-						for _, state_ := range map_state_list {
-							if s.Index(state_county, state_) == 0 {
-								found_state = true
-								break
-							}
-						}
-						if found_state == true {
-							county_data_new[state_county] = sc_count
-						}
-					}
-
-					// replace the function-local dataset with the pruned data
-					mapdata = county_data_new
+					mapdata = pruneCounties(mapsvg_obj, mapdata, state_data)
 				}
 
 				svg_coloured, errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)

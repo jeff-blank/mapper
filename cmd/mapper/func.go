@@ -54,8 +54,8 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 			log.Fatal("rows.Scan(): ", err)
 		}
 		state_counts[state] += count
-		state_county_key := s.Replace(state+" "+county, " ", "_", -1)
-		county_counts[state_county_key] = count
+		stateCounty := s.Replace(state+" "+county, " ", "_", -1)
+		county_counts[stateCounty] = count
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal("rows.Err(): ", err)
@@ -260,4 +260,42 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 			log.Fatal("ahHatesLegends(): ft_ctx.DrawString(): ", err)
 		}
 	}
+}
+
+// Prune county data for *states* that don't appear in the given map. This is
+// so that counties in states outside the map don't cause error messages and
+// counties in the map that have a different (incorrect) name in the data do
+// generate errors.
+func pruneCounties(mapsvg_obj *svgxml.SVG, mapData, stateData map[string]int) map[string]int {
+
+	var mapStateList []string
+
+	countyData_new := make(map[string]int)
+
+	// first, make a list of all states in the map using
+	// stateData as the source of state names
+	for _, g := range mapsvg_obj.G {
+		for state := range stateData {
+			if s.Index(g.Id, state+"_") == 0 {
+				mapStateList = append(mapStateList, state+"_")
+			}
+		}
+	}
+
+	// next, search county names in data for states found in
+	// the map and copy only county data entries for those
+	// found states
+	for stateCounty, sc_count := range mapData {
+		found_state := false
+		for _, state_ := range mapStateList {
+			if s.Index(stateCounty, state_) == 0 {
+				found_state = true
+				break
+			}
+		}
+		if found_state == true {
+			countyData_new[stateCounty] = sc_count
+		}
+	}
+	return countyData_new
 }
