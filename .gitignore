@@ -19,5 +19,6 @@
 *.svg
 *.png
 playground/
-mapper
+cmd/mapper/mapper
+cmd/build-globs/build-globs
 mapper.yml
