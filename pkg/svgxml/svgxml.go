@@ -32,10 +32,10 @@ type TSpanDef struct {
 }
 
 type TextDef struct {
+	Id    string   `xml:"id,attr"`
 	Style string   `xml:"style,attr"`
 	X     string   `xml:"x,attr"`
 	Y     string   `xml:"y,attr"`
-	Id    string   `xml:"id,attr"`
 	TSpan TSpanDef `xml:"tspan"`
 }
 
