@@ -125,14 +125,14 @@ func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs confi
 		log.Fatal("annotate(): ParseFont(): ", err)
 	}
 
-	ft_ctx := freetype.NewContext()
-	ft_ctx.SetDPI(72.0)
-	ft_ctx.SetFont(font)
-	ft_ctx.SetFontSize(fontsize)
-	ft_ctx.SetClip(img.Bounds())
-	ft_ctx.SetDst(img)
-	ft_ctx.SetSrc(image.Black)
-	pt := freetype.Pt(int(ann_x), int(ann_y)+int(ft_ctx.PointToFixed(fontsize)>>6))
+	fontCtx := freetype.NewContext()
+	fontCtx.SetDPI(72.0)
+	fontCtx.SetFont(font)
+	fontCtx.SetFontSize(fontsize)
+	fontCtx.SetClip(img.Bounds())
+	fontCtx.SetDst(img)
+	fontCtx.SetSrc(image.Black)
+	pt := freetype.Pt(int(ann_x), int(ann_y)+int(fontCtx.PointToFixed(fontsize)>>6))
 
 	total_hits := 0
 	for _, hits := range data {
@@ -150,11 +150,11 @@ func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs confi
 	}
 	ann_lines := s.Split(annotation, "\n")
 	for _, line := range ann_lines {
-		_, err = ft_ctx.DrawString(line, pt)
+		_, err = fontCtx.DrawString(line, pt)
 		if err != nil {
-			log.Fatal("annotate(): ft_ctx.DrawString(): ", err)
+			log.Fatal("annotate(): fontCtx.DrawString(): ", err)
 		}
-		pt.Y += ft_ctx.PointToFixed(fontsize * 1.2)
+		pt.Y += fontCtx.PointToFixed(fontsize * 1.2)
 	}
 }
 
@@ -162,10 +162,12 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 	fontfile := defaults.LegendFontFile
 	fontsize := defaults.LegendFontSize
 	gravity := defaults.LegendGravity
+	legendX := defaults.LegendX
+	legendY := defaults.LegendX
 	orient := defaults.LegendOrient
-	cell_w := defaults.LegendCellWidth
-	cell_h := defaults.LegendCellHeight
-	cell_gap := defaults.LegendCellGap
+	cellW := defaults.LegendCellWidth
+	cellH := defaults.LegendCellHeight
+	cellGap := defaults.LegendCellGap
 
 	if len(attrs.LegendAnnotate.LegendFontFile) > 0 {
 		fontfile = attrs.LegendAnnotate.LegendFontFile
@@ -179,18 +181,27 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 		gravity = attrs.LegendAnnotate.LegendGravity
 	}
 
+	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
+		gravity = attrs.LegendAnnotate.LegendGravity
+	}
+
+	if gravity == "-" {
+		legendX = attrs.LegendAnnotate.LegendX
+		legendY = attrs.LegendAnnotate.LegendY
+	}
+
 	if len(attrs.LegendAnnotate.LegendOrient) > 0 {
 		orient = attrs.LegendAnnotate.LegendOrient
 	}
 
 	if attrs.LegendAnnotate.LegendCellWidth > 0 {
-		cell_w = attrs.LegendAnnotate.LegendCellWidth
+		cellW = attrs.LegendAnnotate.LegendCellWidth
 	}
 	if attrs.LegendAnnotate.LegendCellHeight > 0 {
-		cell_h = attrs.LegendAnnotate.LegendCellHeight
+		cellH = attrs.LegendAnnotate.LegendCellHeight
 	}
 	if attrs.LegendAnnotate.LegendCellGap > 0 {
-		cell_gap = attrs.LegendAnnotate.LegendCellGap
+		cellGap = attrs.LegendAnnotate.LegendCellGap
 	}
 
 	fontdata, err := ioutil.ReadFile(fontfile)
@@ -202,42 +213,48 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 		log.Fatal("ahHatesLegends(): ParseFont(): ", err)
 	}
 	b := img.Bounds()
-	ft_ctx := freetype.NewContext()
-	ft_ctx.SetDPI(72.0)
-	ft_ctx.SetFont(font)
-	ft_ctx.SetFontSize(fontsize)
-	ft_ctx.SetClip(b)
-	ft_ctx.SetDst(img)
-	ft_ctx.SetSrc(image.Black)
+	fontCtx := freetype.NewContext()
+	fontCtx.SetDPI(72.0)
+	fontCtx.SetFont(font)
+	fontCtx.SetFontSize(fontsize)
+	fontCtx.SetClip(b)
+	fontCtx.SetDst(img)
+	fontCtx.SetSrc(image.Black)
 
-	legend_width := cell_w
-	legend_height := cell_h
+	legendWidth := cellW
+	legendHeight := cellH
 	if orient == "vertical" {
-		legend_height = len(colours)*(cell_h+cell_gap) - cell_gap
+		legendHeight = len(colours)*(cellH+cellGap) - cellGap
 	} else {
-		legend_width = len(colours)*(cell_w+cell_gap) - cell_gap
+		legendWidth = len(colours)*(cellW+cellGap) - cellGap
 	}
 
-	box_x := 0
-	box_y := 0
-	if s.ToLower(gravity)[0] == 's' {
-		box_y = b.Dy() - legend_height
-	}
-	if s.ToLower(gravity)[1] == 'e' {
-		box_x = b.Dx() - legend_width
+	boxX := 0
+	boxY := 0
+	log.Debugf("gravity: %s; coords: %dx%d", gravity, legendX, legendY)
+	if gravity == "-" {
+		boxX = legendX
+		boxY = legendY
+	} else {
+		if s.ToLower(gravity)[0] == 's' {
+			boxY = b.Dy() - legendHeight
+		}
+		if s.ToLower(gravity)[1] == 'e' {
+			boxX = b.Dx() - legendWidth
+		}
 	}
 
 	for i, mc := range mincount {
-		c_red, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][0:2], 16, 8)
-		c_green, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][2:4], 16, 8)
-		c_blue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
-		fill := color.RGBA{uint8(c_red), uint8(c_green), uint8(c_blue), 255}
-		draw.Draw(img, image.Rect(box_x, box_y, box_x+cell_w, box_y+cell_h),
+		colRed, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][0:2], 16, 8)
+		colGreen, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][2:4], 16, 8)
+		colBlue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
+		fill := color.RGBA{uint8(colRed), uint8(colGreen), uint8(colBlue), 255}
+		draw.Draw(img, image.Rect(boxX, boxY, boxX+cellW, boxY+cellH),
 			&image.Uniform{fill}, image.ZP, draw.Src)
 		if orient == "vertical" {
-			box_y += cell_h + cell_gap
+			boxY += cellH + cellGap
 		} else {
-			box_x += cell_w + cell_gap
+			boxX += cellW + cellGap
 		}
 
 		label := strconv.Itoa(mc)
@@ -246,18 +263,18 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 		} else if mincount[i+1] != (mc + 1) {
 			label = label + "-" + strconv.Itoa(mincount[i+1]-1)
 		}
-		var text_x, text_y int
+		var textX, textY int
 		if orient == "vertical" {
-			text_x = box_x + 4
-			text_y = box_y - cell_h + int(ft_ctx.PointToFixed(fontsize)>>6)
+			textX = boxX + 4
+			textY = boxY - cellH + int(fontCtx.PointToFixed(fontsize)>>6)
 		} else {
-			text_x = box_x - cell_w + 4
-			text_y = box_y + int(ft_ctx.PointToFixed(fontsize)>>6)
+			textX = boxX - cellW + 4
+			textY = boxY + int(fontCtx.PointToFixed(fontsize)>>6)
 		}
-		fpt := freetype.Pt(text_x, text_y)
-		_, err = ft_ctx.DrawString(label, fpt)
+		fpt := freetype.Pt(textX, textY)
+		_, err = fontCtx.DrawString(label, fpt)
 		if err != nil {
-			log.Fatal("ahHatesLegends(): ft_ctx.DrawString(): ", err)
+			log.Fatal("ahHatesLegends(): fontCtx.DrawString(): ", err)
 		}
 	}
 }
