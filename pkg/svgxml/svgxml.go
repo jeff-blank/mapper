@@ -18,6 +18,8 @@ type GroupDef struct {
 	Path  []PathDef `xml:"path"`
 	Xform string    `xml:"transform,attr"`
 	Style string    `xml:"style,attr"`
+	Text  []TextDef `xml:"text"`
+	Rect  []RectDef `xml:"rect"`
 }
 
 type DefsDef struct {
