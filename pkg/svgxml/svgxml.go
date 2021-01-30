@@ -39,6 +39,15 @@ type TextDef struct {
 	TSpan TSpanDef `xml:"tspan"`
 }
 
+type RectDef struct {
+	Id     string `xml:"id,attr"`
+	Style  string `xml:"style,attr"`
+	X      string `xml:"x,attr"`
+	Y      string `xml:"y,attr"`
+	Width  string `xml:"width,attr"`
+	Height string `xml:"height,attr"`
+}
+
 type SVG struct {
 	XMLName xml.Name   `xml:"svg"`
 	XMLNS   string     `xml:"xmlns,attr"`
