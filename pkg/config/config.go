@@ -9,8 +9,8 @@ import (
 
 type LegendAnnotateParams struct {
 	LegendGravity      string  `yaml:"legend_gravity"`
-	LegendX            int     `yaml:"legend_x"`
-	LegendY            int     `yaml:"legend_y"`
+	LegendX            []int   `yaml:"legend_x"`
+	LegendY            []int   `yaml:"legend_y"`
 	LegendOrient       string  `yaml:"legend_orient"`
 	LegendFontFile     string  `yaml:"legend_fontfile"`
 	LegendFontSize     float64 `yaml:"legend_fontsize"`

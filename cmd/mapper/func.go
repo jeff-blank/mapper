@@ -162,12 +162,19 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 	fontfile := defaults.LegendFontFile
 	fontsize := defaults.LegendFontSize
 	gravity := defaults.LegendGravity
-	legendX := defaults.LegendX
-	legendY := defaults.LegendX
 	orient := defaults.LegendOrient
 	cellW := defaults.LegendCellWidth
 	cellH := defaults.LegendCellHeight
 	cellGap := defaults.LegendCellGap
+	legendX := -1
+	legendY := -1
+
+	if len(defaults.LegendX) > 0 {
+		legendX = defaults.LegendX[0]
+	}
+	if len(defaults.LegendY) > 0 {
+		legendY = defaults.LegendY[0]
+	}
 
 	if len(attrs.LegendAnnotate.LegendFontFile) > 0 {
 		fontfile = attrs.LegendAnnotate.LegendFontFile
@@ -186,8 +193,12 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 	}
 
 	if gravity == "-" {
-		legendX = attrs.LegendAnnotate.LegendX
-		legendY = attrs.LegendAnnotate.LegendY
+		if len(attrs.LegendAnnotate.LegendX) > 0 {
+			legendX = attrs.LegendAnnotate.LegendX[0]
+		}
+		if len(attrs.LegendAnnotate.LegendY) > 0 {
+			legendY = attrs.LegendAnnotate.LegendY[0]
+		}
 	}
 
 	if len(attrs.LegendAnnotate.LegendOrient) > 0 {
