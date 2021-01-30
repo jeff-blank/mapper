@@ -153,6 +153,7 @@ func main() {
 					// grab PNG data and cram it into an RGBA image
 					png_data, err := cmd.Output()
 					if err != nil {
+						log.Debugf("%s svg:- -resize %s png:-", imagemagick, attrs.OutputSize)
 						log.Error("read from convert: ", err)
 						return
 					}
@@ -177,7 +178,8 @@ func main() {
 						log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
 					}
 				} else {
-					// just going back to an SVG file
+					// TODO: generate legend
+					// addLegend(svg_coloured, cfg
 					err := ioutil.WriteFile(attrs.OutputFile, []byte(svg_coloured), 0666)
 					if err != nil {
 						log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
