@@ -192,6 +192,9 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 		}
 	} else if imgTypeStr == "svg" {
 		for i, line := range annLines {
+			if line == "" {
+				continue
+			}
 			if s.Index(line, " ") == 0 {
 				spaces := 0
 				for {
