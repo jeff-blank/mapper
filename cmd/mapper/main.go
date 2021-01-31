@@ -180,7 +180,7 @@ func main() {
 					ahHatesLegends(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
 					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
 					svgText := svgxml.SVG2XML(mapsvg_obj, true)
-					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgText), 0666)
+					err := ioutil.WriteFile(attrs.OutputFile, svgText, 0666)
 					if err != nil {
 						log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
 						return
