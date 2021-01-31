@@ -122,7 +122,7 @@ func main() {
 					mapdata = pruneCounties(mapsvg_obj, mapdata, state_data)
 				}
 
-				svgColoured, errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
+				errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
 						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
@@ -146,7 +146,7 @@ func main() {
 					}
 					go func() {
 						defer convert_stdin.Close()
-						io.WriteString(convert_stdin, svgColoured)
+						io.WriteString(convert_stdin, string(svgxml.SVG2XML(mapsvg_obj, false)))
 					}()
 
 					// grab PNG data and cram it into an RGBA image
@@ -177,11 +177,10 @@ func main() {
 						log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
 					}
 				} else {
-					svgTmp := svgxml.XML2SVG([]byte(svgColoured))
-					svgLegend(svgTmp, mincount, cfg.Colours, cfg.LADefaults, attrs)
-					annotate(svgTmp, cfg.LADefaults, attrs, mapdata)
-					svgFinal := svgxml.SVG2XML(svgTmp, true)
-					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgFinal), 0666)
+					svgLegend(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
+					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
+					svgText := svgxml.SVG2XML(mapsvg_obj, true)
+					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgText), 0666)
 					if err != nil {
 						log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
 						return

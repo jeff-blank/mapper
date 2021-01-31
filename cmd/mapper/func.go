@@ -66,7 +66,7 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 
 }
 
-func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) (string, []string) {
+func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) []string {
 
 	var errors []string
 
@@ -82,7 +82,7 @@ func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Rege
 			}
 		}
 	}
-	return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
+	return errors
 }
 
 //func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int)
