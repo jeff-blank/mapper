@@ -288,8 +288,8 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 		legendY = attrs.LegendAnnotate.LegendY[0]
 	}
 
-	// if gravity isn't used ("-") and X and/or Y coord is not given, skip legend
-	if gravity == "-" && (legendX < 0 || legendY < 0) {
+	// if gravity isn't used (empty or "-") and X and/or Y coord is not given, skip legend
+	if (gravity == "-" || gravity == "") && (legendX < 0 || legendY < 0) {
 		log.Debug("ahHatesLegends(): missing gravity with incomplete X/Y coordinate")
 		return
 	}
