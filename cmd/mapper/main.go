@@ -123,7 +123,7 @@ func main() {
 					mapdata = pruneCounties(mapsvg_obj, mapdata, state_data)
 				}
 
-				svg_coloured, errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
+				svgColoured, errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
 						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
@@ -147,7 +147,7 @@ func main() {
 					}
 					go func() {
 						defer convert_stdin.Close()
-						io.WriteString(convert_stdin, svg_coloured)
+						io.WriteString(convert_stdin, svgColoured)
 					}()
 
 					// grab PNG data and cram it into an RGBA image
@@ -179,8 +179,10 @@ func main() {
 					}
 				} else {
 					// TODO: generate legend
-					// addLegend(svg_coloured, cfg
-					err := ioutil.WriteFile(attrs.OutputFile, []byte(svg_coloured), 0666)
+					svgTmp := svgxml.XML2SVG([]byte(svgColoured))
+					svgLegend(svgTmp, mincount, cfg.Colours, cfg.LADefaults, attrs)
+					svgFinal := svgxml.SVG2XML(svgTmp, true)
+					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgFinal), 0666)
 					if err != nil {
 						log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
 						return

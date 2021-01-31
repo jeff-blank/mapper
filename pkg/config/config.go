@@ -14,6 +14,9 @@ type LegendAnnotateParams struct {
 	LegendOrient       string  `yaml:"legend_orient"`
 	LegendFontFile     string  `yaml:"legend_fontfile"`
 	LegendFontSize     float64 `yaml:"legend_fontsize"`
+	LegendTextXOffset  []int   `yaml:"legend_text_x_offset"`
+	LegendTextYOffset  []int   `yaml:"legend_text_y_offset"`
+	LegendTextStyle    string  `yaml:"legend_text_style"`
 	LegendCellWidth    int     `yaml:"legend_cell_width"`
 	LegendCellHeight   int     `yaml:"legend_cell_height"`
 	LegendCellGap      int     `yaml:"legend_cell_gap"`
