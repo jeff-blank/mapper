@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"io/ioutil"
+	"reflect"
 	re "regexp"
 	"strconv"
 	s "strings"
@@ -84,55 +85,67 @@ func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Rege
 	return string(svgxml.SVG2XML(mapsvg_obj, true)), errors
 }
 
-func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
+//func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int)
+func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
+	var (
+		imgRgba     *image.RGBA
+		imgSvg      *svgxml.SVG
+		imgTypeStr  string
+		lineSpacing int
+	)
 
-	ann_x := defaults.AnnotationX
-	ann_y := defaults.AnnotationY
+	imgType := reflect.TypeOf(img)
+	if imgType == reflect.TypeOf(&image.RGBA{}) {
+		imgTypeStr = "rgb"
+		imgRgba = img.(*image.RGBA)
+	} else if imgType == reflect.TypeOf(&svgxml.SVG{}) {
+		imgTypeStr = "svg"
+		imgSvg = img.(*svgxml.SVG)
+	} else {
+		log.Errorf("unknown image type '%s'", imgType.String)
+		return
+	}
+
+	annX := defaults.AnnotationX
+	annY := defaults.AnnotationY
 	timefmt := defaults.AnnotationTimeFmt
 	fontfile := defaults.AnnotationFontFile
-	fontsize := defaults.AnnotationFontSize
+	fontSize := defaults.AnnotationFontSize
 	ann_str := defaults.AnnotationString
+	textStyle := defaults.AnnotationTextStyle
 
+	if len(defaults.AnnotationSpacing) > 0 {
+		lineSpacing = defaults.AnnotationSpacing[0]
+	}
 	if attrs.LegendAnnotate.AnnotationX > 0 {
-		ann_x = attrs.LegendAnnotate.AnnotationX
+		annX = attrs.LegendAnnotate.AnnotationX
 	}
 	if attrs.LegendAnnotate.AnnotationY > 0 {
-		ann_y = attrs.LegendAnnotate.AnnotationY
+		annY = attrs.LegendAnnotate.AnnotationY
 	}
-
 	if len(attrs.LegendAnnotate.AnnotationFontFile) > 0 {
 		fontfile = attrs.LegendAnnotate.AnnotationFontFile
 	}
-
 	if attrs.LegendAnnotate.AnnotationFontSize > 0 {
-		fontsize = attrs.LegendAnnotate.AnnotationFontSize
+		fontSize = attrs.LegendAnnotate.AnnotationFontSize
 	}
-
 	if len(attrs.LegendAnnotate.AnnotationTimeFmt) > 0 {
 		timefmt = attrs.LegendAnnotate.AnnotationTimeFmt
 	}
-
 	if len(attrs.LegendAnnotate.AnnotationString) > 0 {
 		ann_str = attrs.LegendAnnotate.AnnotationString
 	}
-
-	fontdata, err := ioutil.ReadFile(fontfile)
-	if err != nil {
-		log.Fatalf("annotate(): read font file '%s': %v", fontfile, err)
-	}
-	font, err := freetype.ParseFont(fontdata)
-	if err != nil {
-		log.Fatal("annotate(): ParseFont(): ", err)
+	if len(attrs.LegendAnnotate.AnnotationSpacing) > 0 {
+		lineSpacing = attrs.LegendAnnotate.AnnotationSpacing[0]
 	}
 
-	fontCtx := freetype.NewContext()
-	fontCtx.SetDPI(72.0)
-	fontCtx.SetFont(font)
-	fontCtx.SetFontSize(fontsize)
-	fontCtx.SetClip(img.Bounds())
-	fontCtx.SetDst(img)
-	fontCtx.SetSrc(image.Black)
-	pt := freetype.Pt(int(ann_x), int(ann_y)+int(fontCtx.PointToFixed(fontsize)>>6))
+	if len(attrs.LegendAnnotate.AnnotationTextStyle) > 0 {
+		textStyle = attrs.LegendAnnotate.AnnotationTextStyle
+	}
+	if len(textStyle) > 0 {
+		textStyle += ";"
+	}
+	textStyle += "font-size:" + strconv.Itoa(int(fontSize)) + "px"
 
 	total_hits := 0
 	for _, hits := range data {
@@ -148,14 +161,58 @@ func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs confi
 	if s.Index(annotation, "%T%") >= 0 {
 		annotation = s.Replace(annotation, "%T%", time.Now().Format(timefmt), -1)
 	}
-	ann_lines := s.Split(annotation, "\n")
-	for _, line := range ann_lines {
-		_, err = fontCtx.DrawString(line, pt)
+	annLines := s.Split(annotation, "\n")
+
+	if imgTypeStr == "rgb" {
+		fontdata, err := ioutil.ReadFile(fontfile)
 		if err != nil {
-			log.Fatal("annotate(): fontCtx.DrawString(): ", err)
+			log.Errorf("annotate(): read font file '%s': %v", fontfile, err)
+			return
 		}
-		pt.Y += fontCtx.PointToFixed(fontsize * 1.2)
+		font, err := freetype.ParseFont(fontdata)
+		if err != nil {
+			log.Error("annotate(): ParseFont(): ", err)
+			return
+		}
+
+		fontCtx := freetype.NewContext()
+		fontCtx.SetDPI(72.0)
+		fontCtx.SetFont(font)
+		fontCtx.SetFontSize(fontSize)
+		fontCtx.SetClip(imgRgba.Bounds())
+		fontCtx.SetDst(imgRgba)
+		fontCtx.SetSrc(image.Black)
+		pt := freetype.Pt(int(annX), int(annY)+int(fontCtx.PointToFixed(fontSize)>>6))
+
+		for _, line := range annLines {
+			_, err = fontCtx.DrawString(line, pt)
+			if err != nil {
+				log.Fatal("annotate(): fontCtx.DrawString(): ", err)
+			}
+			pt.Y += fontCtx.PointToFixed(fontSize * 1.2)
+		}
+	} else if imgTypeStr == "svg" {
+		for i, line := range annLines {
+			annotationDef := svgxml.TextDef{
+				Id:    "Annotation",
+				Style: textStyle,
+				X:     strconv.Itoa(annX),
+				Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
+				TSpan: svgxml.TSpanDef{
+					Id:    "AnnotationSpan",
+					X:     strconv.Itoa(annX),
+					Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
+					Label: line,
+				},
+			}
+			if len(imgSvg.Text) == 0 {
+				imgSvg.Text = make([]svgxml.TextDef, 0)
+			}
+			imgSvg.Text = append(imgSvg.Text, annotationDef)
+		}
 	}
+
+	log.Debugf("annotate(): done with %s image", imgTypeStr)
 }
 
 func svgLegend(img *svgxml.SVG, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
@@ -231,8 +288,10 @@ func svgLegend(img *svgxml.SVG, mincount []int, colours map[string]string, defau
 	if len(attrs.LegendAnnotate.LegendTextStyle) > 0 {
 		legendTextStyle = attrs.LegendAnnotate.LegendTextStyle
 	}
-
-	legendTextStyle += ";font-size:" + strconv.Itoa(int(textSizePx)) + "px"
+	if len(legendTextStyle) > 0 {
+		legendTextStyle += ";"
+	}
+	legendTextStyle += "font-size:" + strconv.Itoa(int(textSizePx)) + "px"
 
 	rects := make([]svgxml.RectDef, 0)
 	for i, mc := range mincount {

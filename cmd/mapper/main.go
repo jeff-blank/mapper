@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
@@ -102,17 +101,17 @@ func main() {
 				}
 
 				defer wg.Done()
-				defer os.Stderr.Close()
+				//defer os.Stderr.Close()
 
 				mapsvg, err := ioutil.ReadFile(attrs.InputFile)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "can't read '"+attrs.InputFile+"': "+err.Error())
+					log.Error("can't read '" + attrs.InputFile + "': " + err.Error())
 					return
 				}
 
 				mapsvg_obj := svgxml.XML2SVG(mapsvg)
 				if mapsvg_obj == nil {
-					fmt.Fprintf(os.Stderr, "can't create SVG object from "+attrs.InputFile)
+					log.Error("can't create SVG object from " + attrs.InputFile)
 					return
 				}
 
@@ -178,9 +177,9 @@ func main() {
 						log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
 					}
 				} else {
-					// TODO: generate legend
 					svgTmp := svgxml.XML2SVG([]byte(svgColoured))
 					svgLegend(svgTmp, mincount, cfg.Colours, cfg.LADefaults, attrs)
+					annotate(svgTmp, cfg.LADefaults, attrs, mapdata)
 					svgFinal := svgxml.SVG2XML(svgTmp, true)
 					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgFinal), 0666)
 					if err != nil {
