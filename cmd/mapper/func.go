@@ -158,6 +158,132 @@ func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs confi
 	}
 }
 
+func svgLegend(img *svgxml.SVG, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
+	var (
+		textXOffset int
+		textYOffset int
+	)
+	if len(img.Text) == 0 {
+		img.Text = make([]svgxml.TextDef, 0)
+	}
+
+	legendX := -1
+	legendY := -1
+	gravity := defaults.LegendGravity
+	orient := defaults.LegendOrient
+	cellW := defaults.LegendCellWidth
+	cellH := defaults.LegendCellHeight
+	cellGap := defaults.LegendCellGap
+	if len(defaults.LegendTextXOffset) > 0 {
+		textXOffset = defaults.LegendTextXOffset[0]
+	}
+	if len(defaults.LegendTextXOffset) > 0 {
+		textYOffset = defaults.LegendTextYOffset[0]
+	}
+	textSizePx := defaults.LegendFontSize
+	legendTextStyle := defaults.LegendTextStyle
+
+	if len(defaults.LegendX) > 0 {
+		legendX = defaults.LegendX[0]
+	}
+	if len(defaults.LegendY) > 0 {
+		legendY = defaults.LegendY[0]
+	}
+	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
+		gravity = attrs.LegendAnnotate.LegendGravity
+	}
+	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
+		gravity = attrs.LegendAnnotate.LegendGravity
+	}
+	if gravity == "-" {
+		if len(attrs.LegendAnnotate.LegendX) > 0 {
+			legendX = attrs.LegendAnnotate.LegendX[0]
+		} else {
+			return
+		}
+		if len(attrs.LegendAnnotate.LegendY) > 0 {
+			legendY = attrs.LegendAnnotate.LegendY[0]
+		} else {
+			return
+		}
+	}
+	if attrs.LegendAnnotate.LegendCellWidth > 0 {
+		cellW = attrs.LegendAnnotate.LegendCellWidth
+	}
+	if attrs.LegendAnnotate.LegendCellHeight > 0 {
+		cellH = attrs.LegendAnnotate.LegendCellHeight
+	}
+	if attrs.LegendAnnotate.LegendCellGap > 0 {
+		cellGap = attrs.LegendAnnotate.LegendCellGap
+	}
+	if len(attrs.LegendAnnotate.LegendOrient) > 0 {
+		orient = attrs.LegendAnnotate.LegendOrient
+	}
+	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
+		textXOffset = attrs.LegendAnnotate.LegendTextXOffset[0]
+	}
+	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
+		textYOffset = attrs.LegendAnnotate.LegendTextYOffset[0]
+	}
+	if attrs.LegendAnnotate.LegendFontSize > 0 {
+		textSizePx = attrs.LegendAnnotate.LegendFontSize
+	}
+	if len(attrs.LegendAnnotate.LegendTextStyle) > 0 {
+		legendTextStyle = attrs.LegendAnnotate.LegendTextStyle
+	}
+
+	legendTextStyle += ";font-size:" + strconv.Itoa(int(textSizePx)) + "px"
+
+	rects := make([]svgxml.RectDef, 0)
+	for i, mc := range mincount {
+		var (
+			xCoord int
+			yCoord int
+		)
+		if orient == "vertical" {
+			xCoord = legendX
+			yCoord = legendY + i*(cellH+cellGap)
+		} else {
+			xCoord = legendX + i*(cellW+cellGap)
+			yCoord = legendY
+		}
+		newRect := svgxml.RectDef{
+			Id:     "Legend" + strconv.Itoa(i),
+			Style:  "fill:#" + colours[strconv.Itoa(mc)],
+			X:      strconv.Itoa(xCoord),
+			Width:  strconv.Itoa(cellW),
+			Y:      strconv.Itoa(yCoord),
+			Height: strconv.Itoa(cellH),
+		}
+		rects = append(rects, newRect)
+
+		label := strconv.Itoa(mc)
+		if i == len(mincount)-1 {
+			label = label + "+"
+		} else if mincount[i+1] != (mc + 1) {
+			label = label + "-" + strconv.Itoa(mincount[i+1]-1)
+		}
+		newText := svgxml.TextDef{
+			Id:    "LegendText" + strconv.Itoa(i),
+			X:     strconv.Itoa(xCoord + textXOffset),
+			Y:     strconv.Itoa(yCoord + int(textSizePx) + textYOffset),
+			Style: legendTextStyle,
+			TSpan: svgxml.TSpanDef{
+				Id:    "LegendSpan" + strconv.Itoa(i),
+				Label: label,
+				X:     strconv.Itoa(xCoord + textXOffset),
+				Y:     strconv.Itoa(yCoord + int(textSizePx) + textYOffset),
+			},
+		}
+		img.Text = append(img.Text, newText)
+	}
+	if len(img.G) == 0 {
+		img.G = make([]svgxml.GroupDef, 0)
+	}
+	img.G = append(img.G, svgxml.GroupDef{Rect: rects})
+
+}
+
 func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
 	fontfile := defaults.LegendFontFile
 	fontsize := defaults.LegendFontSize
