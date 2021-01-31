@@ -192,6 +192,16 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 		}
 	} else if imgTypeStr == "svg" {
 		for i, line := range annLines {
+			if s.Index(line, " ") == 0 {
+				spaces := 0
+				for {
+					spaces++
+					if i == len(line) || line[spaces] != ' ' {
+						break
+					}
+				}
+				line = s.Replace(line, " ", "$AMPERSAND$#160;", spaces)
+			}
 			annotationDef := svgxml.TextDef{
 				Id:    "Annotation",
 				Style: textStyle,

@@ -90,19 +90,19 @@ func SVG2XML(imgxml *SVG, multi_line bool) []byte {
 		return nil
 	}
 
-	svgtag_end := s.Index(string(xml_txt), "<svg") + 4
-	xmlout := []byte(
-		xml.Header +
-			string(xml_txt[:svgtag_end]) +
-			` xmlns:svg="http://www.w3.org/2000/svg" xml:space="preserve"` +
+	svgTagEnd := s.Index(string(xml_txt), "<svg") + 4
+	xmlOut := xml.Header +
+		string(xml_txt[:svgTagEnd]) +
+		` xmlns:svg="http://www.w3.org/2000/svg" xml:space="preserve"` +
+		s.Replace(
 			s.Replace(
-				s.Replace(
-					string(xml_txt[svgtag_end:]),
-					"></path", " /",
-					-1),
-				"></defs", " /",
-				-1))
-	return xmlout
+				string(xml_txt[svgTagEnd:]),
+				"></path", " /",
+				-1),
+			"></defs", " /",
+			-1)
+	xmlOut = s.ReplaceAll(xmlOut, "$AMPERSAND$", "&")
+	return []byte(xmlOut)
 }
 
 func FindPathById(mapsvg_obj *SVG, id string) *PathDef {
