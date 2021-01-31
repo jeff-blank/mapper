@@ -179,6 +179,7 @@ func main() {
 				} else {
 					ahHatesLegends(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
 					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
+					svgBackground(mapsvg_obj, "ffffff")
 					svgText := svgxml.SVG2XML(mapsvg_obj, true)
 					err := ioutil.WriteFile(attrs.OutputFile, svgText, 0666)
 					if err != nil {

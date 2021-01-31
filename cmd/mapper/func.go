@@ -517,3 +517,17 @@ func pruneCounties(mapsvg_obj *svgxml.SVG, mapData, stateData map[string]int) ma
 	}
 	return countyData_new
 }
+
+func svgBackground(img *svgxml.SVG, bgRGB string) {
+	bgRect := svgxml.RectDef{
+		Id:     "BackgroundColor",
+		Style:  "fill:#" + bgRGB,
+		X:      "0",
+		Y:      "0",
+		Width:  img.Width,
+		Height: img.Height,
+	}
+	// TODO: create img.G if doesn't exist, but it absolutely does. also need work on svgxml.SVG definition/element types
+	newG := svgxml.GroupDef{Rect: []svgxml.RectDef{bgRect}}
+	img.G = append([]svgxml.GroupDef{newG}, img.G...)
+}
