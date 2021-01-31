@@ -531,6 +531,6 @@ func svgBackground(img *svgxml.SVG, bgRGB string) {
 		Height: img.Height,
 	}
 	// TODO: create img.G if doesn't exist, but it absolutely does. also need work on svgxml.SVG definition/element types
-	newG := svgxml.GroupDef{Rect: []svgxml.RectDef{bgRect}}
+	newG := svgxml.GroupDef{Id: "BackgroundG", Rect: []svgxml.RectDef{bgRect}}
 	img.G = append([]svgxml.GroupDef{newG}, img.G...)
 }
