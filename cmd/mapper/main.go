@@ -177,7 +177,7 @@ func main() {
 						log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
 					}
 				} else {
-					svgLegend(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
+					ahHatesLegends(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
 					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
 					svgText := svgxml.SVG2XML(mapsvg_obj, true)
 					err := ioutil.WriteFile(attrs.OutputFile, []byte(svgText), 0666)

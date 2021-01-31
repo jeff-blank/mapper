@@ -101,14 +101,14 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 		imgTypeStr = "svg"
 		imgSvg = img.(*svgxml.SVG)
 	} else {
-		log.Errorf("unknown image type '%s'", imgType.String)
+		log.Errorf("annotate(): unknown image type '%s'", imgType.String)
 		return
 	}
 
 	annX := defaults.AnnotationX
 	annY := defaults.AnnotationY
 	timefmt := defaults.AnnotationTimeFmt
-	fontfile := defaults.AnnotationFontFile
+	fontFile := defaults.AnnotationFontFile
 	fontSize := defaults.AnnotationFontSize
 	ann_str := defaults.AnnotationString
 	textStyle := defaults.AnnotationTextStyle
@@ -123,7 +123,7 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 		annY = attrs.LegendAnnotate.AnnotationY
 	}
 	if len(attrs.LegendAnnotate.AnnotationFontFile) > 0 {
-		fontfile = attrs.LegendAnnotate.AnnotationFontFile
+		fontFile = attrs.LegendAnnotate.AnnotationFontFile
 	}
 	if attrs.LegendAnnotate.AnnotationFontSize > 0 {
 		fontSize = attrs.LegendAnnotate.AnnotationFontSize
@@ -163,9 +163,9 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	annLines := s.Split(annotation, "\n")
 
 	if imgTypeStr == "rgb" {
-		fontdata, err := ioutil.ReadFile(fontfile)
+		fontdata, err := ioutil.ReadFile(fontFile)
 		if err != nil {
-			log.Errorf("annotate(): read font file '%s': %v", fontfile, err)
+			log.Errorf("annotate(): read font file '%s': %v", fontFile, err)
 			return
 		}
 		font, err := freetype.ParseFont(fontdata)
@@ -214,144 +214,43 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	log.Debugf("annotate(): done with %s image", imgTypeStr)
 }
 
-func svgLegend(img *svgxml.SVG, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
+func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
 	var (
 		textXOffset int
 		textYOffset int
+		imgRgba     *image.RGBA
+		imgSvg      *svgxml.SVG
+		imgTypeStr  string
 	)
-	if len(img.Text) == 0 {
-		img.Text = make([]svgxml.TextDef, 0)
+
+	imgType := reflect.TypeOf(img)
+	if imgType == reflect.TypeOf(&image.RGBA{}) {
+		imgTypeStr = "rgb"
+		imgRgba = img.(*image.RGBA)
+	} else if imgType == reflect.TypeOf(&svgxml.SVG{}) {
+		imgTypeStr = "svg"
+		imgSvg = img.(*svgxml.SVG)
+	} else {
+		log.Errorf("ahHatesLegends(): unknown image type '%s'", imgType.String)
+		return
 	}
 
-	legendX := -1
-	legendY := -1
+	fontFile := defaults.LegendFontFile
+	fontSize := defaults.LegendFontSize
 	gravity := defaults.LegendGravity
 	orient := defaults.LegendOrient
 	cellW := defaults.LegendCellWidth
 	cellH := defaults.LegendCellHeight
 	cellGap := defaults.LegendCellGap
+	legendX := -1
+	legendY := -1
+
 	if len(defaults.LegendTextXOffset) > 0 {
 		textXOffset = defaults.LegendTextXOffset[0]
 	}
-	if len(defaults.LegendTextXOffset) > 0 {
+	if len(defaults.LegendTextYOffset) > 0 {
 		textYOffset = defaults.LegendTextYOffset[0]
 	}
-	textSizePx := defaults.LegendFontSize
-	legendTextStyle := defaults.LegendTextStyle
-
-	if len(defaults.LegendX) > 0 {
-		legendX = defaults.LegendX[0]
-	}
-	if len(defaults.LegendY) > 0 {
-		legendY = defaults.LegendY[0]
-	}
-	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
-		gravity = attrs.LegendAnnotate.LegendGravity
-	}
-	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
-		gravity = attrs.LegendAnnotate.LegendGravity
-	}
-	if gravity == "-" {
-		if len(attrs.LegendAnnotate.LegendX) > 0 {
-			legendX = attrs.LegendAnnotate.LegendX[0]
-		} else {
-			return
-		}
-		if len(attrs.LegendAnnotate.LegendY) > 0 {
-			legendY = attrs.LegendAnnotate.LegendY[0]
-		} else {
-			return
-		}
-	}
-	if attrs.LegendAnnotate.LegendCellWidth > 0 {
-		cellW = attrs.LegendAnnotate.LegendCellWidth
-	}
-	if attrs.LegendAnnotate.LegendCellHeight > 0 {
-		cellH = attrs.LegendAnnotate.LegendCellHeight
-	}
-	if attrs.LegendAnnotate.LegendCellGap > 0 {
-		cellGap = attrs.LegendAnnotate.LegendCellGap
-	}
-	if len(attrs.LegendAnnotate.LegendOrient) > 0 {
-		orient = attrs.LegendAnnotate.LegendOrient
-	}
-	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
-		textXOffset = attrs.LegendAnnotate.LegendTextXOffset[0]
-	}
-	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
-		textYOffset = attrs.LegendAnnotate.LegendTextYOffset[0]
-	}
-	if attrs.LegendAnnotate.LegendFontSize > 0 {
-		textSizePx = attrs.LegendAnnotate.LegendFontSize
-	}
-	if len(attrs.LegendAnnotate.LegendTextStyle) > 0 {
-		legendTextStyle = attrs.LegendAnnotate.LegendTextStyle
-	}
-	if len(legendTextStyle) > 0 {
-		legendTextStyle += ";"
-	}
-	legendTextStyle += "font-size:" + strconv.Itoa(int(textSizePx)) + "px"
-
-	rects := make([]svgxml.RectDef, 0)
-	for i, mc := range mincount {
-		var (
-			xCoord int
-			yCoord int
-		)
-		if orient == "vertical" {
-			xCoord = legendX
-			yCoord = legendY + i*(cellH+cellGap)
-		} else {
-			xCoord = legendX + i*(cellW+cellGap)
-			yCoord = legendY
-		}
-		newRect := svgxml.RectDef{
-			Id:     "Legend" + strconv.Itoa(i),
-			Style:  "fill:#" + colours[strconv.Itoa(mc)],
-			X:      strconv.Itoa(xCoord),
-			Width:  strconv.Itoa(cellW),
-			Y:      strconv.Itoa(yCoord),
-			Height: strconv.Itoa(cellH),
-		}
-		rects = append(rects, newRect)
-
-		label := strconv.Itoa(mc)
-		if i == len(mincount)-1 {
-			label = label + "+"
-		} else if mincount[i+1] != (mc + 1) {
-			label = label + "-" + strconv.Itoa(mincount[i+1]-1)
-		}
-		newText := svgxml.TextDef{
-			Id:    "LegendText" + strconv.Itoa(i),
-			X:     strconv.Itoa(xCoord + textXOffset),
-			Y:     strconv.Itoa(yCoord + int(textSizePx) + textYOffset),
-			Style: legendTextStyle,
-			TSpan: svgxml.TSpanDef{
-				Id:    "LegendSpan" + strconv.Itoa(i),
-				Label: label,
-				X:     strconv.Itoa(xCoord + textXOffset),
-				Y:     strconv.Itoa(yCoord + int(textSizePx) + textYOffset),
-			},
-		}
-		img.Text = append(img.Text, newText)
-	}
-	if len(img.G) == 0 {
-		img.G = make([]svgxml.GroupDef, 0)
-	}
-	img.G = append(img.G, svgxml.GroupDef{Rect: rects})
-
-}
-
-func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
-	fontfile := defaults.LegendFontFile
-	fontsize := defaults.LegendFontSize
-	gravity := defaults.LegendGravity
-	orient := defaults.LegendOrient
-	cellW := defaults.LegendCellWidth
-	cellH := defaults.LegendCellHeight
-	cellGap := defaults.LegendCellGap
-	legendX := -1
-	legendY := -1
 
 	if len(defaults.LegendX) > 0 {
 		legendX = defaults.LegendX[0]
@@ -361,34 +260,33 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 	}
 
 	if len(attrs.LegendAnnotate.LegendFontFile) > 0 {
-		fontfile = attrs.LegendAnnotate.LegendFontFile
+		fontFile = attrs.LegendAnnotate.LegendFontFile
 	}
 
 	if attrs.LegendAnnotate.LegendFontSize > 0 {
-		fontsize = attrs.LegendAnnotate.LegendFontSize
+		fontSize = attrs.LegendAnnotate.LegendFontSize
 	}
 
 	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
 		gravity = attrs.LegendAnnotate.LegendGravity
 	}
 
-	if len(attrs.LegendAnnotate.LegendGravity) > 0 {
-		gravity = attrs.LegendAnnotate.LegendGravity
+	if len(attrs.LegendAnnotate.LegendX) > 0 {
+		legendX = attrs.LegendAnnotate.LegendX[0]
+	}
+	if len(attrs.LegendAnnotate.LegendY) > 0 {
+		legendY = attrs.LegendAnnotate.LegendY[0]
 	}
 
-	if gravity == "-" {
-		if len(attrs.LegendAnnotate.LegendX) > 0 {
-			legendX = attrs.LegendAnnotate.LegendX[0]
-		}
-		if len(attrs.LegendAnnotate.LegendY) > 0 {
-			legendY = attrs.LegendAnnotate.LegendY[0]
-		}
+	// if gravity isn't used ("-") and X and/or Y coord is not given, skip legend
+	if gravity == "-" && (legendX < 0 || legendY < 0) {
+		log.Debug("ahHatesLegends(): missing gravity with incomplete X/Y coordinate")
+		return
 	}
 
 	if len(attrs.LegendAnnotate.LegendOrient) > 0 {
 		orient = attrs.LegendAnnotate.LegendOrient
 	}
-
 	if attrs.LegendAnnotate.LegendCellWidth > 0 {
 		cellW = attrs.LegendAnnotate.LegendCellWidth
 	}
@@ -398,79 +296,177 @@ func ahHatesLegends(img *image.RGBA, mincount []int, colours map[string]string, 
 	if attrs.LegendAnnotate.LegendCellGap > 0 {
 		cellGap = attrs.LegendAnnotate.LegendCellGap
 	}
-
-	fontdata, err := ioutil.ReadFile(fontfile)
-	if err != nil {
-		log.Fatalf("ahHatesLegends(): read font file '%s': %v", fontfile, err)
+	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
+		textXOffset = attrs.LegendAnnotate.LegendTextXOffset[0]
 	}
-	font, err := freetype.ParseFont(fontdata)
-	if err != nil {
-		log.Fatal("ahHatesLegends(): ParseFont(): ", err)
-	}
-	b := img.Bounds()
-	fontCtx := freetype.NewContext()
-	fontCtx.SetDPI(72.0)
-	fontCtx.SetFont(font)
-	fontCtx.SetFontSize(fontsize)
-	fontCtx.SetClip(b)
-	fontCtx.SetDst(img)
-	fontCtx.SetSrc(image.Black)
-
-	legendWidth := cellW
-	legendHeight := cellH
-	if orient == "vertical" {
-		legendHeight = len(colours)*(cellH+cellGap) - cellGap
-	} else {
-		legendWidth = len(colours)*(cellW+cellGap) - cellGap
+	if len(attrs.LegendAnnotate.LegendTextXOffset) > 0 {
+		textYOffset = attrs.LegendAnnotate.LegendTextYOffset[0]
 	}
 
-	boxX := 0
-	boxY := 0
-	log.Debugf("gravity: %s; coords: %dx%d", gravity, legendX, legendY)
-	if gravity == "-" {
-		boxX = legendX
-		boxY = legendY
-	} else {
-		if s.ToLower(gravity)[0] == 's' {
-			boxY = b.Dy() - legendHeight
-		}
-		if s.ToLower(gravity)[1] == 'e' {
-			boxX = b.Dx() - legendWidth
-		}
-	}
-
-	for i, mc := range mincount {
-		colRed, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][0:2], 16, 8)
-		colGreen, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][2:4], 16, 8)
-		colBlue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
-		fill := color.RGBA{uint8(colRed), uint8(colGreen), uint8(colBlue), 255}
-		draw.Draw(img, image.Rect(boxX, boxY, boxX+cellW, boxY+cellH),
-			&image.Uniform{fill}, image.ZP, draw.Src)
-		if orient == "vertical" {
-			boxY += cellH + cellGap
-		} else {
-			boxX += cellW + cellGap
-		}
-
-		label := strconv.Itoa(mc)
-		if i == len(mincount)-1 {
-			label = label + "+"
-		} else if mincount[i+1] != (mc + 1) {
-			label = label + "-" + strconv.Itoa(mincount[i+1]-1)
-		}
-		var textX, textY int
-		if orient == "vertical" {
-			textX = boxX + 4
-			textY = boxY - cellH + int(fontCtx.PointToFixed(fontsize)>>6)
-		} else {
-			textX = boxX - cellW + 4
-			textY = boxY + int(fontCtx.PointToFixed(fontsize)>>6)
-		}
-		fpt := freetype.Pt(textX, textY)
-		_, err = fontCtx.DrawString(label, fpt)
+	if imgTypeStr == "rgb" {
+		fontdata, err := ioutil.ReadFile(fontFile)
 		if err != nil {
-			log.Fatal("ahHatesLegends(): fontCtx.DrawString(): ", err)
+			log.Fatalf("ahHatesLegends(): read font file '%s': %v", fontFile, err)
 		}
+		font, err := freetype.ParseFont(fontdata)
+		if err != nil {
+			log.Fatal("ahHatesLegends(): ParseFont(): ", err)
+		}
+		b := imgRgba.Bounds()
+		fontCtx := freetype.NewContext()
+		fontCtx.SetDPI(72.0)
+		fontCtx.SetFont(font)
+		fontCtx.SetFontSize(fontSize)
+		fontCtx.SetClip(b)
+		fontCtx.SetDst(imgRgba)
+		fontCtx.SetSrc(image.Black)
+
+		legendWidth := cellW
+		legendHeight := cellH
+		if orient == "vertical" {
+			legendHeight = len(colours)*(cellH+cellGap) - cellGap
+		} else {
+			legendWidth = len(colours)*(cellW+cellGap) - cellGap
+		}
+
+		boxX := 0
+		boxY := 0
+		log.Debugf("gravity: %s; coords: %dx%d", gravity, legendX, legendY)
+		if gravity == "-" {
+			boxX = legendX
+			boxY = legendY
+		} else {
+			if s.ToLower(gravity)[0] == 's' {
+				boxY = b.Dy() - legendHeight
+			}
+			if s.ToLower(gravity)[1] == 'e' {
+				boxX = b.Dx() - legendWidth
+			}
+		}
+
+		for i, mc := range mincount {
+			colRed, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][0:2], 16, 8)
+			colGreen, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][2:4], 16, 8)
+			colBlue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
+			fill := color.RGBA{uint8(colRed), uint8(colGreen), uint8(colBlue), 255}
+			draw.Draw(imgRgba, image.Rect(boxX, boxY, boxX+cellW, boxY+cellH),
+				&image.Uniform{fill}, image.ZP, draw.Src)
+			if orient == "vertical" {
+				boxY += cellH + cellGap
+			} else {
+				boxX += cellW + cellGap
+			}
+
+			label := strconv.Itoa(mc)
+			if i == len(mincount)-1 {
+				label = label + "+"
+			} else if mincount[i+1] != (mc + 1) {
+				label = label + "-" + strconv.Itoa(mincount[i+1]-1)
+			}
+			var textX, textY int
+			if orient == "vertical" {
+				textX = boxX + 4
+				textY = boxY - cellH + int(fontCtx.PointToFixed(fontSize)>>6)
+			} else {
+				textX = boxX - cellW + 4
+				textY = boxY + int(fontCtx.PointToFixed(fontSize)>>6)
+			}
+			fpt := freetype.Pt(textX, textY)
+			_, err = fontCtx.DrawString(label, fpt)
+			if err != nil {
+				log.Error("ahHatesLegends(): fontCtx.DrawString(): ", err)
+				return
+			}
+		}
+	} else if imgTypeStr == "svg" {
+		log.Debugf("svg starting legend coords: %dx%d", legendX, legendY)
+		if gravity != "-" {
+
+			log.Debugf("legend gravity specified for svg: %s", gravity)
+
+			imgHeight, _ := strconv.Atoi(imgSvg.Height)
+			imgWidth, _ := strconv.Atoi(imgSvg.Width)
+
+			log.Debugf("svg image dim: %dx%d", imgWidth, imgHeight)
+
+			if s.ToLower(gravity)[0] == 's' {
+				if orient == "horizontal" {
+					legendY = imgHeight - cellH
+				} else {
+					legendY = imgHeight - (len(mincount)*(cellH+cellGap) - cellGap)
+				}
+			} else {
+				legendY = 0
+			}
+			if s.ToLower(gravity)[1] == 'e' {
+				if orient == "horizontal" {
+					legendX = imgWidth - (len(mincount)*(cellW+cellGap) - cellGap)
+				} else {
+					legendX = imgWidth - cellW
+				}
+			} else {
+				legendX = 0
+			}
+		}
+		log.Debugf("svg final legend coords:    %dx%d", legendX, legendY)
+		if len(imgSvg.Text) == 0 {
+			imgSvg.Text = make([]svgxml.TextDef, 0)
+		}
+		legendTextStyle := defaults.LegendTextStyle
+		if len(attrs.LegendAnnotate.LegendTextStyle) > 0 {
+			legendTextStyle = attrs.LegendAnnotate.LegendTextStyle
+		}
+		if len(legendTextStyle) > 0 {
+			legendTextStyle += ";"
+		}
+		legendTextStyle += "font-size:" + strconv.Itoa(int(fontSize)) + "px"
+		rects := make([]svgxml.RectDef, 0)
+		for i, mc := range mincount {
+			var (
+				xCoord int
+				yCoord int
+			)
+			if orient == "vertical" {
+				xCoord = legendX
+				yCoord = legendY + i*(cellH+cellGap)
+			} else {
+				xCoord = legendX + i*(cellW+cellGap)
+				yCoord = legendY
+			}
+			newRect := svgxml.RectDef{
+				Id:     "Legend" + strconv.Itoa(i),
+				Style:  "fill:#" + colours[strconv.Itoa(mc)],
+				X:      strconv.Itoa(xCoord),
+				Width:  strconv.Itoa(cellW),
+				Y:      strconv.Itoa(yCoord),
+				Height: strconv.Itoa(cellH),
+			}
+			rects = append(rects, newRect)
+
+			label := strconv.Itoa(mc)
+			if i == len(mincount)-1 {
+				label = label + "+"
+			} else if mincount[i+1] != (mc + 1) {
+				label = label + "-" + strconv.Itoa(mincount[i+1]-1)
+			}
+			newText := svgxml.TextDef{
+				Id:    "LegendText" + strconv.Itoa(i),
+				X:     strconv.Itoa(xCoord + textXOffset),
+				Y:     strconv.Itoa(yCoord + int(fontSize) + textYOffset),
+				Style: legendTextStyle,
+				TSpan: svgxml.TSpanDef{
+					Id:    "LegendSpan" + strconv.Itoa(i),
+					Label: label,
+					X:     strconv.Itoa(xCoord + textXOffset),
+					Y:     strconv.Itoa(yCoord + int(fontSize) + textYOffset),
+				},
+			}
+			imgSvg.Text = append(imgSvg.Text, newText)
+		}
+		if len(imgSvg.G) == 0 {
+			imgSvg.G = make([]svgxml.GroupDef, 0)
+		}
+		imgSvg.G = append(imgSvg.G, svgxml.GroupDef{Rect: rects})
 	}
 }
 
