@@ -85,7 +85,6 @@ func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Rege
 	return errors
 }
 
-//func annotate(img *image.RGBA, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int)
 func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
 	var (
 		imgRgba     *image.RGBA
