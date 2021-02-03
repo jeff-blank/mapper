@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -144,7 +145,7 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	if len(textStyle) > 0 {
 		textStyle += ";"
 	}
-	textStyle += "font-size:" + strconv.Itoa(int(fontSize)) + "px"
+	textStyle += fmt.Sprintf("font-size:%.2fpx", fontSize)
 
 	total_hits := 0
 	for _, hits := range data {
@@ -432,7 +433,7 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 		if len(legendTextStyle) > 0 {
 			legendTextStyle += ";"
 		}
-		legendTextStyle += "font-size:" + strconv.Itoa(int(fontSize)) + "px"
+		legendTextStyle += fmt.Sprintf("font-size:%.2fpx", fontSize)
 		rects := make([]svgxml.RectDef, 0)
 		for i, mc := range mincount {
 			var (
