@@ -84,7 +84,6 @@ from
 	counties_master cm
 where
 	(h.country='US' and
-	h.state <> 'DC' and
 	h.bill_id = b.id and
 	h.county = cm.county and
 	h.state = cm.state)` + queryExtra
