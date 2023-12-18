@@ -85,8 +85,7 @@ from
 where
 	(h.country='US' and
 	h.bill_id = b.id and
-	h.county = cm.county and
-	h.state = cm.state)` + queryExtra
+	h.county_id = cm.id)` + queryExtra
 	rows, err := dbh.Query(query)
 	if err != nil {
 		log.Fatal("dbData(): dbh.Query(): ", err)
