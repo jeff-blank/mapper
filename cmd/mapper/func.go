@@ -70,17 +70,25 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) []string {
 
 	var errors []string
+	var element *svgxml.PathDef
 
 	for id, count := range data {
+		element = nil
 		for _, mc := range mincount {
 			if count >= mc {
-				element := svgxml.FindPathById(mapsvg_obj, id)
+				element = svgxml.FindPathById(mapsvg_obj, id)
 				if element != nil {
 					element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}"+colours[strconv.Itoa(mc)])))
 				} else {
 					errors = append(errors, "'"+id+"' not found")
 				}
 			}
+		}
+		if element != nil {
+			if len(element.Title) > 0 {
+				element.Title += " "
+			}
+			element.Title += fmt.Sprintf("(%d)", count)
 		}
 	}
 	return errors
