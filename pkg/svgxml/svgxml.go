@@ -11,6 +11,7 @@ type PathDef struct {
 	Id    string `xml:"id,attr"`
 	D     string `xml:"d,attr"`
 	Style string `xml:"style,attr"`
+	Title string `xml:"title"`
 }
 
 type GroupDef struct {
