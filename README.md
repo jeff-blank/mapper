@@ -2,17 +2,9 @@
 
 ## Setup
 
-After cloning the repo:
-
-```bash
-$ go get github.com/golang/freetype gopkg.in/yaml.v2 github.com/lib/pq
-```
-Replace `github.com/lib/pq` with the package for your preferred database driver
-and update the `_ "github.com/lib/pq"` import line in `mapper.go`. Then
-
-```bash
-$ go build mapper.go
-```
+After cloning the repo, update files containing the import `_ "github.com/lib/pq"`
+with the package for your preferred database driver and run `go mod tidy`. Other
+database- and driver-specific settings are found in the configuration file (see below).
 
 ## Format of input SVG files
 
