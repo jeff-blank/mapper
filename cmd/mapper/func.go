@@ -67,8 +67,7 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 
 }
 
-func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int) []string {
-
+func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int, attrs config.MapSet) []string {
 	var errors []string
 	var element *svgxml.PathDef
 
@@ -80,7 +79,13 @@ func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Rege
 				if element != nil {
 					element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}"+colours[strconv.Itoa(mc)])))
 				} else {
-					errors = append(errors, "'"+id+"' not found")
+					var ignoreMe bool
+					if _, ok := attrs.IgnoreMissing[id]; ok {
+						ignoreMe = attrs.IgnoreMissing[id]
+					}
+					if !ignoreMe {
+						errors = append(errors, "'"+id+"' not found")
+					}
 				}
 			}
 		}

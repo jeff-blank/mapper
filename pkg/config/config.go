@@ -38,6 +38,7 @@ type MapSet struct {
 	LegendAnnotate   LegendAnnotateParams `yaml:",inline"`
 	InlineData       map[string]int       `yaml:"inline_data"`
 	DbWhere          string               `yaml:"db_where"`
+	IgnoreMissing    map[string]bool      `yaml:"ignore_missing"`
 }
 
 type Config struct {

@@ -122,7 +122,7 @@ func main() {
 					mapdata = pruneCounties(mapsvg_obj, mapdata, state_data)
 				}
 
-				errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount)
+				errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount, attrs)
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
 						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
