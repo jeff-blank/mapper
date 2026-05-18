@@ -109,9 +109,9 @@ func main() {
 					return
 				}
 
-				mapsvg_obj := svgxml.XML2SVG(mapsvg)
-				if mapsvg_obj == nil {
-					log.Error("can't create SVG object from " + attrs.InputFile)
+				mapsvg_obj, err := svgxml.XML2SVG(mapsvg)
+				if err != nil {
+					log.Errorf("%s || can't create SVG object from %s", err.Error(), attrs.InputFile)
 					return
 				}
 
@@ -146,7 +146,13 @@ func main() {
 					}
 					go func() {
 						defer convert_stdin.Close()
-						io.WriteString(convert_stdin, string(svgxml.SVG2XML(mapsvg_obj, false)))
+						svgOut, err := svgxml.SVG2XML(mapsvg_obj, false)
+						if err == nil {
+							io.WriteString(convert_stdin, string(svgOut))
+						} else {
+							log.Error(err)
+							return
+						}
 					}()
 
 					// grab PNG data and cram it into an RGBA image
@@ -180,10 +186,14 @@ func main() {
 					ahHatesLegends(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
 					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
 					svgBackground(mapsvg_obj, "ffffff")
-					svgText := svgxml.SVG2XML(mapsvg_obj, true)
-					err := ioutil.WriteFile(attrs.OutputFile, svgText, 0666)
+					svgText, err := svgxml.SVG2XML(mapsvg_obj, true)
 					if err != nil {
-						log.Errorf("can't write to '%s': %v", attrs.OutputFile, err)
+						log.Errorf("can't write to '%s': %s", attrs.OutputFile, err.Error())
+						return
+					}
+					err = ioutil.WriteFile(attrs.OutputFile, svgText, 0666)
+					if err != nil {
+						log.Errorf("can't write to '%s': %s", attrs.OutputFile, err.Error())
 						return
 					}
 				}

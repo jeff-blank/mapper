@@ -3,7 +3,6 @@ package svgxml
 import (
 	"encoding/xml"
 	"fmt"
-	"os"
 	s "strings"
 )
 
@@ -64,19 +63,18 @@ type SVG struct {
 	Text    []TextDef  `xml:"text"`
 }
 
-func XML2SVG(svg_xml []byte) *SVG {
+func XML2SVG(svg_xml []byte) (*SVG, error) {
 
 	svg_obj := SVG{}
 	err := xml.Unmarshal([]byte(svg_xml), &svg_obj)
 	if err == nil {
-		return &svg_obj
+		return &svg_obj, nil
 	} else {
-		fmt.Fprintf(os.Stderr, "xml.Unmarshal error: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("xml.Unmarshal error: %s\n", err.Error())
 	}
 }
 
-func SVG2XML(imgxml *SVG, multi_line bool) []byte {
+func SVG2XML(imgxml *SVG, multi_line bool) ([]byte, error) {
 
 	var xml_txt []byte
 	var err error
@@ -87,8 +85,7 @@ func SVG2XML(imgxml *SVG, multi_line bool) []byte {
 		xml_txt, err = xml.Marshal(imgxml)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "xml.Marshal error: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("xml.Marshal error: %s\n", err.Error())
 	}
 
 	svgTagEnd := s.Index(string(xml_txt), "<svg") + 4
@@ -103,7 +100,7 @@ func SVG2XML(imgxml *SVG, multi_line bool) []byte {
 			"></defs", " /",
 			-1)
 	xmlOut = s.ReplaceAll(xmlOut, "$AMPERSAND$", "&")
-	return []byte(xmlOut)
+	return []byte(xmlOut), nil
 }
 
 func FindPathById(mapsvg_obj *SVG, id string) *PathDef {
