@@ -212,14 +212,8 @@ func annotate(img any, defaults config.LegendAnnotateParams, attrs config.MapSet
 				continue
 			}
 			if s.Index(line, " ") == 0 {
-				spaces := 0
-				for {
-					spaces++
-					if i == len(line) || line[spaces] != ' ' {
-						break
-					}
-				}
-				line = s.Replace(line, " ", "$AMPERSAND$#160;", spaces)
+				spaces := len(line) - len(s.TrimLeft(line, " "))
+				line = s.Replace(line, " ", "\u00A0", spaces)
 			}
 			annotationDef.TSpan = append(annotationDef.TSpan, svgxml.TSpanDef{
 				Id:    fmt.Sprintf("AnnotationSpan_%d", i),
