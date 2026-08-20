@@ -221,19 +221,17 @@ func annotate(img any, defaults config.LegendAnnotateParams, attrs config.MapSet
 				}
 				line = s.Replace(line, " ", "$AMPERSAND$#160;", spaces)
 			}
-			annotationDef.TSpan = []svgxml.TSpanDef{
-				{
-					Id:    fmt.Sprintf("AnnotationSpan_%d", i),
-					X:     strconv.Itoa(annX),
-					Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
-					Label: line,
-				},
-			}
+			annotationDef.TSpan = append(annotationDef.TSpan, svgxml.TSpanDef{
+				Id:    fmt.Sprintf("AnnotationSpan_%d", i),
+				X:     strconv.Itoa(annX),
+				Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
+				Label: line,
+			})
 			if len(imgSvg.Text) == 0 {
 				imgSvg.Text = make([]svgxml.TextDef, 0)
 			}
-			imgSvg.Text = append(imgSvg.Text, annotationDef)
 		}
+		imgSvg.Text = append(imgSvg.Text, annotationDef)
 	}
 
 	log.Debugf("annotate(): done with %s image", imgTypeStr)
