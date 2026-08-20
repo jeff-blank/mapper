@@ -6,17 +6,17 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	re "regexp"
-	"sort"
+	"slices"
 	"strconv"
 	s "strings"
 	"sync"
 
 	"github.com/jeff-blank/mapper/pkg/config"
-	"github.com/jeff-blank/mapper/pkg/svgxml"
+	"github.com/jeff-blank/svgxml"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
@@ -24,13 +24,12 @@ import (
 // set up integer array sorting
 type IntArray []int
 
-func (list IntArray) Len() int           { return len(list) }
-func (list IntArray) Swap(a, b int)      { list[a], list[b] = list[b], list[a] }
-func (list IntArray) Less(a, b int) bool { return list[a] < list[b] }
-
 func main() {
-
-	var wg sync.WaitGroup
+	var (
+		wg          sync.WaitGroup
+		state_data  map[string]int
+		county_data map[string]int
+	)
 
 	configFile := flag.String("conf", "mapper.yml", "configuration file")
 	logDebug := flag.Bool("d", false, "debug-level logging")
@@ -53,7 +52,7 @@ func main() {
 		i++
 	}
 
-	sort.Sort(IntArray(mincount))
+	slices.Sort(mincount)
 
 	re_fill, err := re.Compile(`(fill:#)......`)
 	if err != nil {
@@ -65,7 +64,9 @@ func main() {
 		log.Fatal("re.Compile() .svg: ", err)
 	}
 
-	state_data, county_data := dbData(cfg.DbParam)
+	if cfg.DbParam["type"] != "" {
+		state_data, county_data = dbData(cfg.DbParam)
+	}
 
 	for maptype, mapset := range cfg.Maps {
 		var data map[string]int
@@ -103,13 +104,8 @@ func main() {
 				defer wg.Done()
 				//defer os.Stderr.Close()
 
-				mapsvg, err := ioutil.ReadFile(attrs.InputFile)
-				if err != nil {
-					log.Error("can't read '" + attrs.InputFile + "': " + err.Error())
-					return
-				}
-
-				mapsvg_obj, err := svgxml.XML2SVG(mapsvg)
+				attrs.InputFile = filepath.FromSlash(attrs.InputFile)
+				mapsvg, err := svgxml.NewFromFile(attrs.InputFile)
 				if err != nil {
 					log.Errorf("%s || can't create SVG object from %s", err.Error(), attrs.InputFile)
 					return
@@ -119,18 +115,21 @@ func main() {
 					mapdata = attrs.InlineData
 				}
 				if maptype == "counties" {
-					mapdata = pruneCounties(mapsvg_obj, mapdata, state_data)
+					mapdata = pruneCounties(mapsvg, mapdata, state_data)
 				}
 
-				errlist := colourSvgData(mapsvg_obj, mapdata, re_fill, cfg.Colours, mincount, attrs)
+				errlist, err := colourSvgData(mapsvg, mapdata, re_fill, cfg.Colours, mincount, attrs)
+				if err != nil {
+					log.Fatal(err)
+				}
 				if len(errlist) > 0 {
 					for _, errmsg := range errlist {
 						log.Warnf("%s: %s\n", attrs.InputFile, errmsg)
 					}
 				}
 
-				ret := re_svgext.Find([]byte(attrs.OutputFile))
-				if ret == nil {
+				attrs.OutputFile = filepath.FromSlash(attrs.OutputFile)
+				if dotSvg := re_svgext.FindStringIndex(attrs.OutputFile); dotSvg == nil {
 					// going to call ImageMagick's 'convert' because I can't find
 					// a damn SVG package that can write to a non-SVG image and I
 					// don't have the chops to write one.
@@ -146,9 +145,9 @@ func main() {
 					}
 					go func() {
 						defer convert_stdin.Close()
-						svgOut, err := svgxml.SVG2XML(mapsvg_obj, false)
+						svgOut, err := mapsvg.GetXml()
 						if err == nil {
-							io.WriteString(convert_stdin, string(svgOut))
+							io.Writer.Write(convert_stdin, svgOut)
 						} else {
 							log.Error(err)
 							return
@@ -183,17 +182,13 @@ func main() {
 						log.Fatalf("close png file '%s': %v", attrs.OutputFile, err)
 					}
 				} else {
-					ahHatesLegends(mapsvg_obj, mincount, cfg.Colours, cfg.LADefaults, attrs)
-					annotate(mapsvg_obj, cfg.LADefaults, attrs, mapdata)
-					svgBackground(mapsvg_obj, "ffffff")
-					svgText, err := svgxml.SVG2XML(mapsvg_obj, true)
+					ahHatesLegends(mapsvg, mincount, cfg.Colours, cfg.LADefaults, attrs)
+					log.Debugf("main: default font size=%+v", cfg.LADefaults.AnnotationFontSize)
+					annotate(mapsvg, cfg.LADefaults, attrs, mapdata)
+					mapsvg.AddBackground("#ffffff")
+					err = mapsvg.WriteFileIndented(attrs.OutputFile, "", "  ")
 					if err != nil {
-						log.Errorf("can't write to '%s': %s", attrs.OutputFile, err.Error())
-						return
-					}
-					err = ioutil.WriteFile(attrs.OutputFile, svgText, 0666)
-					if err != nil {
-						log.Errorf("can't write to '%s': %s", attrs.OutputFile, err.Error())
+						log.Error(err)
 						return
 					}
 				}

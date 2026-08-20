@@ -6,7 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"io/ioutil"
+	"os"
 	"reflect"
 	re "regexp"
 	"strconv"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/golang/freetype"
 	"github.com/jeff-blank/mapper/pkg/config"
-	"github.com/jeff-blank/mapper/pkg/svgxml"
+	"github.com/jeff-blank/svgxml"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -56,7 +56,7 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 			log.Fatal("rows.Scan(): ", err)
 		}
 		state_counts[state] += count
-		stateCounty := s.Replace(state+" "+county, " ", "_", -1)
+		stateCounty := s.ReplaceAll(state+" "+county, " ", "_")
 		county_counts[stateCounty] = count
 	}
 	if err := rows.Err(); err != nil {
@@ -67,17 +67,20 @@ func dbData(dbconfig map[string]string) (map[string]int, map[string]int) {
 
 }
 
-func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int, attrs config.MapSet) []string {
+func colourSvgData(svg *svgxml.SVG, data map[string]int, re_fill *re.Regexp, colours map[string]string, mincount []int, attrs config.MapSet) ([]string, error) {
 	var errors []string
-	var element *svgxml.PathDef
 
 	for id, count := range data {
-		element = nil
+		var element *svgxml.PathDef
 		for _, mc := range mincount {
 			if count >= mc {
-				element = svgxml.FindPathById(mapsvg_obj, id)
-				if element != nil {
-					element.Style = string(re_fill.ReplaceAll([]byte(element.Style), []byte("${1}"+colours[strconv.Itoa(mc)])))
+				e, err := svg.FindPathsById(id, svgxml.FindFirst)
+				if err != nil {
+					return nil, err
+				}
+				if len(e) > 0 && e[0] != nil {
+					element = e[0]
+					element.Style = re_fill.ReplaceAllString(element.Style, "${1}"+colours[strconv.Itoa(mc)])
 				} else {
 					var ignoreMe bool
 					if _, ok := attrs.IgnoreMissing[id]; ok {
@@ -90,16 +93,13 @@ func colourSvgData(mapsvg_obj *svgxml.SVG, data map[string]int, re_fill *re.Rege
 			}
 		}
 		if element != nil {
-			if len(element.Title) > 0 {
-				element.Title += " "
-			}
-			element.Title += fmt.Sprintf("(%d)", count)
+			element.Title = s.TrimLeft(fmt.Sprintf("%s (%d)", element.Title, count), " ")
 		}
 	}
-	return errors
+	return errors, nil
 }
 
-func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
+func annotate(img any, defaults config.LegendAnnotateParams, attrs config.MapSet, data map[string]int) {
 	var (
 		imgRgba     *image.RGBA
 		imgSvg      *svgxml.SVG
@@ -108,14 +108,14 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	)
 
 	imgType := reflect.TypeOf(img)
-	if imgType == reflect.TypeOf(&image.RGBA{}) {
+	if imgType == reflect.TypeFor[*image.RGBA]() {
 		imgTypeStr = "rgb"
 		imgRgba = img.(*image.RGBA)
-	} else if imgType == reflect.TypeOf(&svgxml.SVG{}) {
+	} else if imgType == reflect.TypeFor[*svgxml.SVG]() {
 		imgTypeStr = "svg"
 		imgSvg = img.(*svgxml.SVG)
 	} else {
-		log.Errorf("annotate(): unknown image type '%s'", imgType.String)
+		log.Errorf("annotate(): unknown image type '%s'", imgType.String())
 		return
 	}
 
@@ -124,7 +124,6 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	timefmt := defaults.AnnotationTimeFmt
 	fontFile := defaults.AnnotationFontFile
 	fontSize := defaults.AnnotationFontSize
-	ann_str := defaults.AnnotationString
 	textStyle := defaults.AnnotationTextStyle
 
 	if len(defaults.AnnotationSpacing) > 0 {
@@ -145,9 +144,6 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	if len(attrs.LegendAnnotate.AnnotationTimeFmt) > 0 {
 		timefmt = attrs.LegendAnnotate.AnnotationTimeFmt
 	}
-	if len(attrs.LegendAnnotate.AnnotationString) > 0 {
-		ann_str = attrs.LegendAnnotate.AnnotationString
-	}
 	if len(attrs.LegendAnnotate.AnnotationSpacing) > 0 {
 		lineSpacing = attrs.LegendAnnotate.AnnotationSpacing[0]
 	}
@@ -155,10 +151,8 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	if len(attrs.LegendAnnotate.AnnotationTextStyle) > 0 {
 		textStyle = attrs.LegendAnnotate.AnnotationTextStyle
 	}
-	if len(textStyle) > 0 {
-		textStyle += ";"
-	}
-	textStyle += fmt.Sprintf("font-size:%.2fpx", fontSize)
+	textStyle = s.TrimLeft(fmt.Sprintf("%s;font-size:%.2fpx", textStyle, fontSize), ";")
+	annLines := attrs.LegendAnnotate.Annotation
 
 	total_hits := 0
 	for _, hits := range data {
@@ -169,15 +163,17 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 		regions += attrs.RegionAdjustment
 	}
 
-	annotation := s.Replace(ann_str, "%t%", strconv.Itoa(total_hits), -1)
-	annotation = s.Replace(annotation, "%c%", strconv.Itoa(regions), -1)
-	if s.Index(annotation, "%T%") >= 0 {
-		annotation = s.Replace(annotation, "%T%", time.Now().Format(timefmt), -1)
+	for i, line := range annLines {
+		annLines[i] = s.ReplaceAll(
+			s.ReplaceAll(
+				s.ReplaceAll(line, "%t%", strconv.Itoa(total_hits)),
+				"%c%", strconv.Itoa(regions),
+			),
+			"%T%", time.Now().Format(timefmt))
 	}
-	annLines := s.Split(annotation, "\n")
 
 	if imgTypeStr == "rgb" {
-		fontdata, err := ioutil.ReadFile(fontFile)
+		fontdata, err := os.ReadFile(fontFile)
 		if err != nil {
 			log.Errorf("annotate(): read font file '%s': %v", fontFile, err)
 			return
@@ -205,6 +201,12 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 			pt.Y += fontCtx.PointToFixed(fontSize * 1.2)
 		}
 	} else if imgTypeStr == "svg" {
+		annotationDef := svgxml.TextDef{
+			Id:    "Annotation",
+			Style: textStyle,
+			X:     strconv.Itoa(annX),
+			Y:     strconv.Itoa(annY),
+		}
 		for i, line := range annLines {
 			if line == "" {
 				continue
@@ -219,13 +221,9 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 				}
 				line = s.Replace(line, " ", "$AMPERSAND$#160;", spaces)
 			}
-			annotationDef := svgxml.TextDef{
-				Id:    "Annotation",
-				Style: textStyle,
-				X:     strconv.Itoa(annX),
-				Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
-				TSpan: svgxml.TSpanDef{
-					Id:    "AnnotationSpan",
+			annotationDef.TSpan = []svgxml.TSpanDef{
+				{
+					Id:    fmt.Sprintf("AnnotationSpan_%d", i),
 					X:     strconv.Itoa(annX),
 					Y:     strconv.Itoa(annY + int(float64(i)*(fontSize+float64(lineSpacing)))),
 					Label: line,
@@ -241,7 +239,7 @@ func annotate(img interface{}, defaults config.LegendAnnotateParams, attrs confi
 	log.Debugf("annotate(): done with %s image", imgTypeStr)
 }
 
-func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
+func ahHatesLegends(img any, mincount []int, colours map[string]string, defaults config.LegendAnnotateParams, attrs config.MapSet) {
 	var (
 		textXOffset int
 		textYOffset int
@@ -251,14 +249,14 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 	)
 
 	imgType := reflect.TypeOf(img)
-	if imgType == reflect.TypeOf(&image.RGBA{}) {
+	if imgType == reflect.TypeFor[*image.RGBA]() {
 		imgTypeStr = "rgb"
 		imgRgba = img.(*image.RGBA)
-	} else if imgType == reflect.TypeOf(&svgxml.SVG{}) {
+	} else if imgType == reflect.TypeFor[*svgxml.SVG]() {
 		imgTypeStr = "svg"
 		imgSvg = img.(*svgxml.SVG)
 	} else {
-		log.Errorf("ahHatesLegends(): unknown image type '%s'", imgType.String)
+		log.Errorf("ahHatesLegends(): unknown image type '%s'", imgType.String())
 		return
 	}
 
@@ -330,8 +328,9 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 		textYOffset = attrs.LegendAnnotate.LegendTextYOffset[0]
 	}
 
-	if imgTypeStr == "rgb" {
-		fontdata, err := ioutil.ReadFile(fontFile)
+	switch imgTypeStr {
+	case "rgb":
+		fontdata, err := os.ReadFile(fontFile)
 		if err != nil {
 			log.Fatalf("ahHatesLegends(): read font file '%s': %v", fontFile, err)
 		}
@@ -377,7 +376,7 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 			colBlue, _ := strconv.ParseUint(colours[strconv.Itoa(mc)][4:6], 16, 8)
 			fill := color.RGBA{uint8(colRed), uint8(colGreen), uint8(colBlue), 255}
 			draw.Draw(imgRgba, image.Rect(boxX, boxY, boxX+cellW, boxY+cellH),
-				&image.Uniform{fill}, image.ZP, draw.Src)
+				&image.Uniform{fill}, image.Pt(0, 0), draw.Src)
 			if orient == "vertical" {
 				boxY += cellH + cellGap
 			} else {
@@ -405,15 +404,13 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 				return
 			}
 		}
-	} else if imgTypeStr == "svg" {
+	case "svg":
 		log.Debugf("svg starting legend coords: %dx%d", legendX, legendY)
 		if gravity != "-" {
-
 			log.Debugf("legend gravity specified for svg: %s", gravity)
 
 			imgHeight, _ := strconv.Atoi(imgSvg.Height)
 			imgWidth, _ := strconv.Atoi(imgSvg.Width)
-
 			log.Debugf("svg image dim: %dx%d", imgWidth, imgHeight)
 
 			if s.ToLower(gravity)[0] == 's' {
@@ -481,11 +478,13 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 				X:     strconv.Itoa(xCoord + textXOffset),
 				Y:     strconv.Itoa(yCoord + int(fontSize) + textYOffset),
 				Style: legendTextStyle,
-				TSpan: svgxml.TSpanDef{
-					Id:    "LegendSpan" + strconv.Itoa(i),
-					Label: label,
-					X:     strconv.Itoa(xCoord + textXOffset),
-					Y:     strconv.Itoa(yCoord + int(fontSize) + textYOffset),
+				TSpan: []svgxml.TSpanDef{
+					{
+						Id:    "LegendSpan" + strconv.Itoa(i),
+						Label: label,
+						X:     strconv.Itoa(xCoord + textXOffset),
+						Y:     strconv.Itoa(yCoord + int(fontSize) + textYOffset),
+					},
 				},
 			}
 			imgSvg.Text = append(imgSvg.Text, newText)
@@ -501,7 +500,7 @@ func ahHatesLegends(img interface{}, mincount []int, colours map[string]string, 
 // so that counties in states outside the map don't cause error messages and
 // counties in the map that have a different (incorrect) name in the data do
 // generate errors.
-func pruneCounties(mapsvg_obj *svgxml.SVG, mapData, stateData map[string]int) map[string]int {
+func pruneCounties(svg *svgxml.SVG, mapData, stateData map[string]int) map[string]int {
 
 	var mapStateList []string
 
@@ -509,7 +508,7 @@ func pruneCounties(mapsvg_obj *svgxml.SVG, mapData, stateData map[string]int) ma
 
 	// first, make a list of all states in the map using
 	// stateData as the source of state names
-	for _, g := range mapsvg_obj.G {
+	for _, g := range svg.G {
 		for state := range stateData {
 			if s.Index(g.Id, state+"_") == 0 {
 				mapStateList = append(mapStateList, state+"_")
@@ -533,18 +532,4 @@ func pruneCounties(mapsvg_obj *svgxml.SVG, mapData, stateData map[string]int) ma
 		}
 	}
 	return countyData_new
-}
-
-func svgBackground(img *svgxml.SVG, bgRGB string) {
-	bgRect := svgxml.RectDef{
-		Id:     "BackgroundColor",
-		Style:  "fill:#" + bgRGB,
-		X:      "0",
-		Y:      "0",
-		Width:  img.Width,
-		Height: img.Height,
-	}
-	// TODO: create img.G if doesn't exist, but it absolutely does. also need work on svgxml.SVG definition/element types
-	newG := svgxml.GroupDef{Id: "BackgroundG", Rect: []svgxml.RectDef{bgRect}}
-	img.G = append([]svgxml.GroupDef{newG}, img.G...)
 }
